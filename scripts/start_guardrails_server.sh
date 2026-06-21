@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start NVIDIA NeMo Guardrails centralized server (default port 8000 on 127.0.0.1)
+# Start NeMo Guardrails centralized server (auto-bind 127.0.0.1; port 8000 or 8001 on CDSW)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -124,7 +124,7 @@ for fallback in (8000, 8001, 8080):
     if fallback not in candidates:
         candidates.append(fallback)
 
-# Prefer loopback — CDSW often holds 8000 on 0.0.0.0 (pod IP) for the app proxy.
+# Prefer loopback — CDSW often holds 8000 on 0.0.0.0 (pod IP); fallback order 8000 → 8001 → 8080.
 hosts = ("127.0.0.1", "0.0.0.0")
 
 for port in candidates:
@@ -165,9 +165,14 @@ print_guardrails_urls() {
   local port="$2"
 
   echo ""
+  echo "=== Guardrails server bound to port ${port} (${bind_host}) ==="
   echo "NeMo Guardrails server listening on ${bind_host}:${port}"
   echo "  API URL: http://127.0.0.1:${port}/"
   echo "  Streamlit sidebar (Centralized Server): http://127.0.0.1:${port}"
   echo "  (http://localhost:${port} also works on the same machine)"
+  echo ""
+  echo "  Add to .env (match this port):"
+  echo "    GUARDRAILS_PORT=${port}"
+  echo "    GUARDRAILS_SERVER_URL=http://127.0.0.1:${port}"
   echo ""
 }

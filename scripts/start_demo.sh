@@ -11,10 +11,10 @@ source "${SCRIPT_DIR}/common_env.sh"
 export_pythonpath
 
 START_SERVER="${START_GUARDRAILS_SERVER:-false}"
-GUARDRAILS_PORT="${GUARDRAILS_PORT:-8000}"
+GUARDRAILS_PORT="${GUARDRAILS_PORT:-8001}"
 
 if [ "${START_SERVER}" = "true" ]; then
-  echo "Starting guardrails server in background on port ${GUARDRAILS_PORT}..."
+  echo "Starting guardrails server in background (preferred port ${GUARDRAILS_PORT}; see script output for actual bind)..."
   GUARDRAILS_PORT="${GUARDRAILS_PORT}" bash scripts/start_guardrails_server.sh &
   sleep 3
 fi

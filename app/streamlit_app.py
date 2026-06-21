@@ -32,6 +32,15 @@ from src.llm.provider import (
 from src.simulation.batch_runner import run_batch
 from src.simulation.queries import EXAMPLE_QUERIES, get_all_queries
 
+def default_guardrails_server_url() -> str:
+    """Sidebar default: GUARDRAILS_PORT (CDSW often 8001), else GUARDRAILS_SERVER_URL."""
+    port = os.getenv("GUARDRAILS_PORT", "").strip()
+    if port:
+        return f"http://127.0.0.1:{port}"
+    return os.getenv("GUARDRAILS_SERVER_URL", "http://127.0.0.1:8001")
+
+
+
 st.set_page_config(
     page_title="NeMo Guardrails Banking Demo",
     page_icon="🏦",
@@ -125,7 +134,7 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
     mode_label = st.sidebar.selectbox(
         "Execution Mode",
         ["Centralized Server", "Embedded", "Unguarded Only"],
-        help="Centralized Server (recommended): NeMo server on :8000. "
+        help="Centralized Server (recommended): NeMo server (often :8001 on CDSW). "
         "Embedded: in-process LLMRails. Unguarded: no safety rails.",
     )
     mode_map = {
@@ -136,7 +145,7 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
     mode: GuardrailsMode = mode_map[mode_label]
     server_url = st.sidebar.text_input(
         "Guardrails Server URL",
-        value=os.getenv("GUARDRAILS_SERVER_URL", "http://localhost:8000"),
+        value=default_guardrails_server_url(),
     )
 
     st.sidebar.subheader("Active Policies")
@@ -359,7 +368,7 @@ def render_architecture_tab(server_url: str) -> None:
     |------|-------------|
     | **Unguarded** | CrewAI agents call LLM directly — shows raw/unsafe responses |
     | **Embedded** | `LLMRails` SDK in-process — per-request policy composition |
-    | **Centralized Server** | NeMo FastAPI server at port 8000 — enterprise governance |
+    | **Centralized Server** | NeMo FastAPI server (8000 or 8001 on CDSW) — enterprise governance |
 
     ### Data Flow
     1. User query → Router classifies intent
@@ -376,7 +385,7 @@ def render_architecture_tab(server_url: str) -> None:
          │
          └── NeMo Guardrails
                   ├── Embedded LLMRails
-                  └── Server Mode (:8000)
+                  └── Server Mode (:8000 / :8001)
     """, language="text")
 
     st.markdown(f"""

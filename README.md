@@ -10,7 +10,7 @@ A Cloudera AI Workbench demo showcasing **NVIDIA NeMo Guardrails** with a **Crew
 
 - **CrewAI multi-agent workflow**: `CustomerServiceAgent` + `CreditMortgageAgent` with distinct CIS lookup tools
 - **Modular NeMo policies**: PII, jailbreak, topic control, toxicity/bias (checkbox toggles in UI)
-- **Three guardrails modes**: unguarded, embedded `LLMRails`, centralized server (`:8000`) — **centralized server recommended**
+- **Three guardrails modes**: unguarded, embedded `LLMRails`, centralized server (`:8000` / `:8001` on CDSW) — **centralized server recommended**
 - **LLM providers**: OpenAI `gpt-4o-mini` or **Cloudera AI Inference Service (CAIIS)**
 - **Safety models**: LLM-as-judge (`self_check`) default, optional NVIDIA NIM toggle
 - **Streamlit UI** (default CDSW app port **8090** on `127.0.0.1`, or auto-fallback): Chat Compare, Batch Dashboard, Architecture tabs
@@ -35,6 +35,7 @@ cp .env.openai.example .env    # OpenAI (quick start with an API key)
 
 # Terminal 1 — centralized guardrails server (recommended)
 bash scripts/start_guardrails_server.sh
+# Note the printed bind port (8000 vs 8001 on CDSW) for the Streamlit sidebar
 
 # Terminal 2 — Streamlit UI
 bash scripts/start_demo.sh
@@ -42,7 +43,7 @@ bash scripts/start_demo.sh
 
 Open the printed URL. In CDSW sessions, open the **Application** on port **8090** (Streamlit binds to `127.0.0.1:8090` because the pod IP already holds that port for the proxy).
 
-The Streamlit sidebar auto-selects **Cloudera AI Inference** when `CAIIS_BASE_URL` is set in `.env`; otherwise it defaults to **OpenAI**. Guardrails mode defaults to **Centralized Server** — set server URL to `http://localhost:8000`.
+The Streamlit sidebar auto-selects **Cloudera AI Inference** when `CAIIS_BASE_URL` is set in `.env`; otherwise it defaults to **OpenAI**. Guardrails mode defaults to **Centralized Server** — set **Guardrails Server URL** to the port printed at startup (often `http://127.0.0.1:8001` on CDSW).
 
 ### Using Cloudera AI Inference (CAIIS)
 
@@ -98,8 +99,8 @@ ai-governance/
 | `CDP_TOKEN` | CDP auth token for CAIIS (or read from `/tmp/jwt` in CDSW) |
 | `DEFAULT_LLM_PROVIDER` | Optional override: `caiis` or `openai` (auto-detected from env when unset) |
 | `NVIDIA_API_KEY` | For NIM safety models (optional; default is `self_check`) |
-| `GUARDRAILS_SERVER_URL` | Centralized server URL (default: `http://localhost:8000`) |
-| `GUARDRAILS_PORT` | Guardrails server port (default: `8000`) |
+| `GUARDRAILS_SERVER_URL` | Centralized server URL (default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
+| `GUARDRAILS_PORT` | Preferred bind port for `start_guardrails_server.sh` (example: `8001` on CDSW; script may pick 8000→8001→8080) |
 | `STREAMLIT_PORT` | UI port override (checked before auto-detect) |
 | `CDSW_APP_PORT` | CDSW application port (default in sessions: `8090`) |
 
@@ -135,7 +136,7 @@ flowchart TD
     F --> G{Guardrails mode?}
     G -->|Unguarded / no policies| H[Show same response both columns]
     G -->|Embedded| I[compose_config + LLMRails]
-    G -->|Centralized Server| J[POST /v1/chat/completions :8000]
+    G -->|Centralized Server| J[POST /v1/chat/completions :8000 or :8001]
     I --> K[Input rail check on user query]
     K -->|Blocked| L[Refusal message — input rail name]
     K -->|Pass| M[Output rail check on agent response]
@@ -316,7 +317,7 @@ bash scripts/start_guardrails_server.sh
 START_GUARDRAILS_SERVER=false bash scripts/start_demo.sh
 ```
 
-Set sidebar URL to `http://localhost:8000`.
+Set sidebar URL to match server startup output (e.g. `http://127.0.0.1:8001` on CDSW).
 
 ---
 
@@ -421,7 +422,7 @@ bash scripts/start_demo.sh
 
 - **Main app**: `bash scripts/start_demo.sh` sets `PYTHONPATH` to the project root and picks a free bind address/port (`CDSW_APP_PORT` / `STREAMLIT_PORT`, then `8501`, `8090`, `8080`).
 - **CDSW ports**: `8090` (app), `8080` (public), `8100` (read-only) are reserved on the pod IP; Streamlit listens on **`127.0.0.1:8090`** so the Workbench Application proxy can reach it.
-- **Guardrails server**: run in a separate terminal; binds to **`127.0.0.1:8000`** by default (see Troubleshooting if port 8000 is in use on `0.0.0.0`)
+- **Guardrails server**: run in a separate terminal; **`pick_guardrails_bind`** tries **`127.0.0.1:8000`**, then **8001**, then 8080 — check startup output for the actual port
 - **CDP token**: automatically read from `/tmp/jwt` in CDSW sessions (via `scripts/common_env.sh`)
 - **CAIIS**: set `CAIIS_BASE_URL` and `CAIIS_MODEL` in `.env`, then select **Cloudera AI Inference** in the sidebar (or use OpenAI via `.env.openai.example`)
 
@@ -451,9 +452,9 @@ This repo's `scripts/start_guardrails_server.sh` uses `pick_guardrails_bind()` (
 bash scripts/start_guardrails_server.sh
 ```
 
-Use the printed URL in the Streamlit sidebar (**Centralized Server** mode): `http://127.0.0.1:8000` (or `http://localhost:8000`).
+Use the printed URL in the Streamlit sidebar (**Centralized Server** mode), e.g. `http://127.0.0.1:8001` when 8000 is in use (or `http://127.0.0.1:8000` when free).
 
-To force a different port: `GUARDRAILS_PORT=8001 bash scripts/start_guardrails_server.sh` and set the same URL in the sidebar.
+To pin a port: set `GUARDRAILS_PORT=8001` in `.env` (or export it), restart the server, and use the same value in the sidebar / `GUARDRAILS_SERVER_URL`.
 
 ### Port 8090 already in use (Streamlit)
 
