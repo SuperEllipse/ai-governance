@@ -114,7 +114,7 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
     mode_label = st.sidebar.selectbox(
         "Execution Mode",
         ["Centralized Server", "Embedded", "Unguarded Only"],
-        help="Centralized Server (recommended for workbench): NeMo server on :8000. "
+        help="Centralized Server (recommended): NeMo server on :8000. "
         "Embedded: in-process LLMRails. Unguarded: no safety rails.",
     )
     mode_map = {
@@ -376,9 +376,9 @@ def render_architecture_tab(server_url: str) -> None:
     - [Cloudera AI Inference](https://docs.cloudera.com/machine-learning/cloud/ai-inference/)
     - [GitHub: SuperEllipse/ai-governance](https://github.com/SuperEllipse/ai-governance)
 
-    ### Deployment modes
-    - **Dev/testing**: OpenAI `gpt-4o-mini` (default) — set `OPENAI_API_KEY` in `.env`
-    - **Production workbench**: Cloudera AI Inference — copy `.env.caiis.example` to `.env`
+    ### LLM providers
+    - **OpenAI** `gpt-4o-mini` (default) — set `OPENAI_API_KEY` in `.env`
+    - **Cloudera AI Inference (CAIIS)** — copy `.env.caiis.example` to `.env`
     - **Guardrails**: **Centralized Server** (recommended) — run `bash scripts/start_guardrails_server.sh`
 
     ### Switch to Cloudera AI Inference

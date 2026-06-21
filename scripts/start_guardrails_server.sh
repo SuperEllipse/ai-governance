@@ -12,7 +12,7 @@ export_pythonpath
 
 export MAIN_MODEL_ENGINE="${MAIN_MODEL_ENGINE:-openai}"
 
-# Default to OpenAI for testing; switch to CAIIS by setting CAIIS_BASE_URL / CAIIS_MODEL in .env
+# Default to OpenAI; switch to CAIIS by setting CAIIS_BASE_URL / CAIIS_MODEL in .env
 if [[ -n "${CAIIS_BASE_URL:-}" ]]; then
   export MAIN_MODEL_NAME="${MAIN_MODEL_NAME:-${CAIIS_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1}}"
   export MAIN_MODEL_BASE_URL="${MAIN_MODEL_BASE_URL:-${CAIIS_BASE_URL}}"
@@ -21,7 +21,7 @@ else
   export MAIN_MODEL_BASE_URL="${MAIN_MODEL_BASE_URL:-${OPENAI_BASE_URL:-https://api.openai.com/v1}}"
 fi
 
-# API key: OpenAI key first, then CDP token for CAIIS workbench sessions
+# API key: OpenAI key first, then CDP token for CAIIS
 if [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -n "${CDP_TOKEN:-}" ]]; then
   export OPENAI_API_KEY="${CDP_TOKEN}"
 elif [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -f /tmp/jwt ]]; then

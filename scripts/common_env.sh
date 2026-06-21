@@ -33,12 +33,12 @@ if [[ -f "/home/cdsw/.env" ]]; then
   fi
 fi
 
-# OpenAI defaults for local/dev testing (override via .env or export)
+# OpenAI defaults when using the OpenAI provider (override via .env or export)
 export OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}"
 export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
 
 # CAIIS: only used when CAIIS_BASE_URL is explicitly set (see .env.caiis.example)
-# CDP token: env var or CDSW session file (for CAIIS auth in workbench)
+# CDP token: env var or CDSW session file (for CAIIS auth)
 if [[ -z "${CDP_TOKEN:-}" ]] && [[ -f /tmp/jwt ]]; then
   export CDP_TOKEN="$(tr -d '[:space:]' < /tmp/jwt)"
 fi

@@ -10,53 +10,11 @@ A Cloudera AI Workbench demo showcasing **NVIDIA NeMo Guardrails** with a **Crew
 
 - **CrewAI multi-agent workflow**: `CustomerServiceAgent` + `CreditMortgageAgent` with distinct CIS lookup tools
 - **Modular NeMo policies**: PII, jailbreak, topic control, toxicity/bias (checkbox toggles in UI)
-- **Three guardrails modes**: unguarded, embedded `LLMRails`, centralized server (`:8000`) — **centralized server recommended for workbench**
-- **LLM providers**: OpenAI `gpt-4o-mini` (default for testing) or Cloudera AI Inference Service (production)
+- **Three guardrails modes**: unguarded, embedded `LLMRails`, centralized server (`:8000`) — **centralized server recommended**
+- **LLM providers**: OpenAI `gpt-4o-mini` or **Cloudera AI Inference Service (CAIIS)**
 - **Safety models**: LLM-as-judge (`self_check`) default, optional NVIDIA NIM toggle
 - **Streamlit UI** (default CDSW app port **8090** on `127.0.0.1`, or auto-fallback): Chat Compare, Batch Dashboard, Architecture tabs
 - **Violation logging**: SQLite store with drill-down in dashboard
-
-## Two-Deployment Strategy
-
-| Environment | LLM provider | Guardrails mode | Config template |
-|-------------|--------------|-----------------|-----------------|
-| **Local / dev testing** | OpenAI `gpt-4o-mini` | Centralized Server or Embedded | `.env.openai.example` |
-| **Cloudera AI Workbench (production)** | Cloudera AI Inference (CAIIS) | **Centralized Server** (workbench reaches CAIIS) | `.env.caiis.example` |
-
-OpenAI is the default so you can clone and run immediately with an API key. Switch to CAIIS in production by updating `.env` and selecting **Cloudera AI Inference** in the Streamlit sidebar.
-
-## Syncing Code Between Environments
-
-Code in your **dev CDSW session** and the **remote Private Cloud CAI Workbench** is **not** shared automatically. Both should track the same GitHub repo, but you must **commit + push** from where you edited, then **pull** on the other machine.
-
-| Where you changed code | What to do |
-|------------------------|------------|
-| Dev / local CDSW session | Commit and push to GitHub |
-| Remote workbench (demo at `/home/cdsw`, not an `ai-governance/` subfolder) | `git pull` after someone pushed |
-
-**Push from dev** (after editing in this repo):
-
-```bash
-git add -A
-git commit -m "Describe your change"
-git push origin main
-```
-
-Remote: [github.com/SuperEllipse/ai-governance](https://github.com/SuperEllipse/ai-governance)
-
-**Pull on the remote workbench** (CAII VPN / private cloud session):
-
-```bash
-cd /home/cdsw
-git pull origin main
-```
-
-**After pulling** on the workbench, restart anything that loads Python or shell scripts from disk:
-
-1. **Guardrails server** — stop the old process (Ctrl+C), then `bash scripts/start_guardrails_server.sh`
-2. **Streamlit** — stop and re-run `bash scripts/start_demo.sh` (or refresh only if you changed static assets the app hot-reloads)
-
-**Environment files:** `.env` is **not** in git. Configure secrets and CAIIS URLs separately on each workbench (`cp .env.caiis.example .env` on the remote session). Never commit API keys, CDP tokens, or internal cluster URLs.
 
 ## Quick Start
 
@@ -70,9 +28,10 @@ pip install -r requirements.txt
 # Presidio PII model (one-time, ~560MB)
 python -m spacy download en_core_web_lg
 
-# Configure environment (OpenAI default for testing)
-cp .env.openai.example .env
-# Edit .env and set OPENAI_API_KEY=sk-your-key
+# Configure environment — pick one provider template:
+cp .env.openai.example .env    # OpenAI (quick start with an API key)
+# cp .env.caiis.example .env   # Cloudera AI Inference (CAIIS)
+# Edit .env with your API key or CAIIS endpoint details
 
 # Terminal 1 — centralized guardrails server (recommended)
 bash scripts/start_guardrails_server.sh
@@ -85,9 +44,9 @@ Open the printed URL. In CDSW sessions, open the **Application** on port **8090*
 
 The Streamlit sidebar defaults to **OpenAI** provider and **Centralized Server** guardrails mode. Set server URL to `http://localhost:8000`.
 
-### Switch OpenAI → Cloudera AI Inference
+### Using Cloudera AI Inference (CAIIS)
 
-**Option A — environment file (recommended for workbench):**
+**Option A — environment file (recommended):**
 
 ```bash
 cp .env.caiis.example .env
@@ -106,8 +65,8 @@ bash scripts/start_demo.sh
 ```
 ai-governance/
 ├── .env.example              # Combined template (placeholders only)
-├── .env.openai.example       # OpenAI dev/testing template
-├── .env.caiis.example        # CAIIS production workbench template
+├── .env.openai.example       # OpenAI provider template
+├── .env.caiis.example        # CAIIS inference service template
 ├── requirements.txt
 ├── README.md
 ├── data/dummy_cis/           # Dummy CIS JSON datasets
@@ -131,10 +90,10 @@ ai-governance/
 
 | Variable | Description |
 |----------|-------------|
-| `OPENAI_API_KEY` | OpenAI API key (**default provider** for testing) |
+| `OPENAI_API_KEY` | OpenAI API key (default provider) |
 | `OPENAI_MODEL` | OpenAI model name (default: `gpt-4o-mini`) |
 | `OPENAI_BASE_URL` | OpenAI-compatible base URL (default: `https://api.openai.com/v1`) |
-| `CAIIS_BASE_URL` | Cloudera AI Inference endpoint `/v1` URL (set for production) |
+| `CAIIS_BASE_URL` | Cloudera AI Inference endpoint `/v1` URL |
 | `CAIIS_MODEL` | Model deployed on CAIIS (e.g. `nvidia/llama-3.3-nemotron-super-49b-v1`) |
 | `CDP_TOKEN` | CDP auth token for CAIIS (or read from `/tmp/jwt` in CDSW) |
 | `NVIDIA_API_KEY` | For NIM safety models (optional; default is `self_check`) |
@@ -231,7 +190,7 @@ Sidebar checkboxes map to policy keys in `src/guardrails/config_composer.py` (`P
 | **Policy checkboxes** | Fully honored — only selected policies are merged | Server uses base config only; sidebar policies are recorded in logs but not dynamically pushed to the server |
 | **Agent integration** | Input rail on query, output rail on pre-generated agent response | Query enriched with `[Agent context: …]` snippet, sent to `/v1/chat/completions` |
 | **Key files** | `src/guardrails/client.py`, `src/guardrails/config_composer.py` | `scripts/start_guardrails_server.sh`, `GUARDRAILS_SERVER_URL` env var |
-| **Best for** | Tool-heavy CrewAI flows | Enterprise governance pattern, shared guardrails service (**recommended for workbench**) |
+| **Best for** | Tool-heavy CrewAI flows | Enterprise governance pattern, shared guardrails service (**recommended**) |
 
 Embedded mode is recommended for demos involving CIS tool calls because the centralized server regenerates a response rather than checking the agent's exact output.
 
@@ -397,7 +356,7 @@ Dataset breakdown (100 queries): 40 happy path, 15 PII, 15 jailbreak, 15 topic, 
 | **NeMo rail triggered** | None for happy path |
 | **Policy defined in** | `src/llm/provider.py` (`LLMConfig`, `get_llm_config`, `create_crewai_llm`); wired in `app/streamlit_app.py` sidebar |
 
-**CAIIS env example (production workbench):**
+**CAIIS env example:**
 
 ```bash
 cp .env.caiis.example .env
@@ -409,7 +368,7 @@ export CDP_TOKEN="your-cdp-bearer-token"   # or /tmp/jwt in CDSW sessions
 
 Copy `.env.openai.example` or `.env.caiis.example` to `.env` and adjust values. In CDSW sessions, `scripts/common_env.sh` loads `/tmp/jwt` automatically when `CDP_TOKEN` is unset.
 
-**Switching in the UI:** Open the sidebar **LLM Provider** dropdown. **OpenAI** is selected by default. Choose **Cloudera AI Inference** for production; Base URL and Model fields update to each provider's defaults.
+**Switching in the UI:** Open the sidebar **LLM Provider** dropdown. **OpenAI** is selected by default. Choose **Cloudera AI Inference** to use CAIIS; Base URL and Model fields update to each provider's defaults.
 
 ---
 
@@ -439,9 +398,9 @@ Copy `.env.openai.example` or `.env.caiis.example` to `.env` and adjust values. 
 - For quick batch demos, use sample size **10** — full 100-query run is slow with live LLM calls.
 - The **Architecture** tab has a component overview; this walkthrough section adds the policy-level detail.
 
-## Cloudera AI Workbench Deployment
+## Inference Service (CAIIS) Configuration
 
-Recommended production setup: **CAIIS** LLM + **Centralized Server** guardrails (workbench can reach CAIIS endpoints).
+Recommended setup: **CAIIS** LLM + **Centralized Server** guardrails.
 
 ```bash
 git clone https://github.com/SuperEllipse/ai-governance.git
@@ -463,7 +422,7 @@ bash scripts/start_demo.sh
 - **CDSW ports**: `8090` (app), `8080` (public), `8100` (read-only) are reserved on the pod IP; Streamlit listens on **`127.0.0.1:8090`** so the Workbench Application proxy can reach it.
 - **Guardrails server**: run in a separate terminal; binds to **`127.0.0.1:8000`** by default (see Troubleshooting if port 8000 is in use on `0.0.0.0`)
 - **CDP token**: automatically read from `/tmp/jwt` in CDSW sessions (via `scripts/common_env.sh`)
-- **CAIIS**: set `CAIIS_BASE_URL` and `CAIIS_MODEL` in `.env`, then select **Cloudera AI Inference** in the sidebar (or keep OpenAI for testing)
+- **CAIIS**: set `CAIIS_BASE_URL` and `CAIIS_MODEL` in `.env`, then select **Cloudera AI Inference** in the sidebar (or use OpenAI via `.env.openai.example`)
 
 For port 8000 exposure in Kubernetes:
 ```bash
