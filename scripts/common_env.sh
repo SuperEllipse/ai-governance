@@ -11,11 +11,26 @@ export_pythonpath() {
 }
 
 # Load .env if present (never commit .env — use .env.example templates)
+load_env_file() {
+  local env_file="$1"
+  if [[ -f "${env_file}" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    set +a
+  fi
+}
+
+_sourced_env=""
 if [[ -f "${ROOT}/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "${ROOT}/.env"
-  set +a
+  load_env_file "${ROOT}/.env"
+  _sourced_env="$(readlink -f "${ROOT}/.env" 2>/dev/null || echo "${ROOT}/.env")"
+fi
+if [[ -f "/home/cdsw/.env" ]]; then
+  _cdsw_env="$(readlink -f "/home/cdsw/.env" 2>/dev/null || echo "/home/cdsw/.env")"
+  if [[ "${_sourced_env}" != "${_cdsw_env}" ]]; then
+    load_env_file "/home/cdsw/.env"
+  fi
 fi
 
 # OpenAI defaults for local/dev testing (override via .env or export)
@@ -73,6 +88,51 @@ sys.exit(1)
 PY
 }
 
+pick_guardrails_bind() {
+  python3 - <<'PY'
+import os
+import socket
+import sys
+
+
+def can_bind(host: str, port: int) -> bool:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind((host, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+candidates: list[int] = []
+raw = os.environ.get("GUARDRAILS_PORT")
+if raw:
+    try:
+        candidates.append(int(raw))
+    except ValueError:
+        print(f"Invalid GUARDRAILS_PORT={raw!r}", file=sys.stderr)
+
+for fallback in (8000, 8001, 8080):
+    if fallback not in candidates:
+        candidates.append(fallback)
+
+# Prefer loopback — CDSW often holds 8000 on 0.0.0.0 (pod IP) for the app proxy.
+hosts = ("127.0.0.1", "0.0.0.0")
+
+for port in candidates:
+    for host in hosts:
+        if can_bind(host, port):
+            print(f"{host} {port}")
+            sys.exit(0)
+
+print("Could not find an available host/port for the guardrails server.", file=sys.stderr)
+sys.exit(1)
+PY
+}
+
 print_streamlit_urls() {
   local bind_host="$1"
   local port="$2"
@@ -92,5 +152,17 @@ print_streamlit_urls() {
       echo "  Session: https://${CDSW_DOMAIN}/${owner}/${CDSW_PROJECT}/engine/${CDSW_MASTER_ID}/"
     fi
   fi
+  echo ""
+}
+
+print_guardrails_urls() {
+  local bind_host="$1"
+  local port="$2"
+
+  echo ""
+  echo "NeMo Guardrails server listening on ${bind_host}:${port}"
+  echo "  API URL: http://127.0.0.1:${port}/"
+  echo "  Streamlit sidebar (Centralized Server): http://127.0.0.1:${port}"
+  echo "  (http://localhost:${port} also works on the same machine)"
   echo ""
 }

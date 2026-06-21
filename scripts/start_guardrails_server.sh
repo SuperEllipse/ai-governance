@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start NVIDIA NeMo Guardrails centralized server on port 8000
+# Start NVIDIA NeMo Guardrails centralized server (default port 8000 on 127.0.0.1)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,17 +29,22 @@ elif [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -f /tmp/jwt ]]; then
 fi
 export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 
-PORT="${GUARDRAILS_PORT:-8000}"
 CONFIG_PATH="${GUARDRAILS_CONFIG:-./guardrails/base}"
+
+read -r BIND_HOST PORT < <(pick_guardrails_bind)
+export GUARDRAILS_HOST="${BIND_HOST}"
+export GUARDRAILS_PORT="${PORT}"
 
 echo "Starting NeMo Guardrails server..."
 echo "  Config: $CONFIG_PATH"
-echo "  Port:   $PORT"
+echo "  Bind:   ${BIND_HOST}:${PORT}"
 echo "  Model:  $MAIN_MODEL_NAME"
 echo "  Base:   $MAIN_MODEL_BASE_URL"
 echo "  PYTHONPATH=${PYTHONPATH}"
+print_guardrails_urls "${BIND_HOST}" "${PORT}"
 
-exec nemoguardrails server \
+exec python3 "${SCRIPT_DIR}/run_guardrails_uvicorn.py" \
   --config "$CONFIG_PATH" \
-  --port "$PORT" \
+  --host "${BIND_HOST}" \
+  --port "${PORT}" \
   --default-config-id "banking_demo"

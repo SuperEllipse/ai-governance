@@ -25,6 +25,39 @@ A Cloudera AI Workbench demo showcasing **NVIDIA NeMo Guardrails** with a **Crew
 
 OpenAI is the default so you can clone and run immediately with an API key. Switch to CAIIS in production by updating `.env` and selecting **Cloudera AI Inference** in the Streamlit sidebar.
 
+## Syncing Code Between Environments
+
+Code in your **dev CDSW session** and the **remote Private Cloud CAI Workbench** is **not** shared automatically. Both should track the same GitHub repo, but you must **commit + push** from where you edited, then **pull** on the other machine.
+
+| Where you changed code | What to do |
+|------------------------|------------|
+| Dev / local CDSW session | Commit and push to GitHub |
+| Remote workbench (demo at `/home/cdsw`, not an `ai-governance/` subfolder) | `git pull` after someone pushed |
+
+**Push from dev** (after editing in this repo):
+
+```bash
+git add -A
+git commit -m "Describe your change"
+git push origin main
+```
+
+Remote: [github.com/SuperEllipse/ai-governance](https://github.com/SuperEllipse/ai-governance)
+
+**Pull on the remote workbench** (CAII VPN / private cloud session):
+
+```bash
+cd /home/cdsw
+git pull origin main
+```
+
+**After pulling** on the workbench, restart anything that loads Python or shell scripts from disk:
+
+1. **Guardrails server** — stop the old process (Ctrl+C), then `bash scripts/start_guardrails_server.sh`
+2. **Streamlit** — stop and re-run `bash scripts/start_demo.sh` (or refresh only if you changed static assets the app hot-reloads)
+
+**Environment files:** `.env` is **not** in git. Configure secrets and CAIIS URLs separately on each workbench (`cp .env.caiis.example .env` on the remote session). Never commit API keys, CDP tokens, or internal cluster URLs.
+
 ## Quick Start
 
 ```bash
@@ -90,6 +123,7 @@ ai-governance/
 └── scripts/
     ├── common_env.sh         # Shared env loading (.env, CDP token)
     ├── start_guardrails_server.sh
+    ├── run_guardrails_uvicorn.py  # loopback-friendly server launcher
     └── start_demo.sh
 ```
 
@@ -427,7 +461,7 @@ bash scripts/start_demo.sh
 
 - **Main app**: `bash scripts/start_demo.sh` sets `PYTHONPATH` to the project root and picks a free bind address/port (`CDSW_APP_PORT` / `STREAMLIT_PORT`, then `8501`, `8090`, `8080`).
 - **CDSW ports**: `8090` (app), `8080` (public), `8100` (read-only) are reserved on the pod IP; Streamlit listens on **`127.0.0.1:8090`** so the Workbench Application proxy can reach it.
-- **Guardrails server**: run in a separate terminal on port **8000** (may need port forwarding)
+- **Guardrails server**: run in a separate terminal; binds to **`127.0.0.1:8000`** by default (see Troubleshooting if port 8000 is in use on `0.0.0.0`)
 - **CDP token**: automatically read from `/tmp/jwt` in CDSW sessions (via `scripts/common_env.sh`)
 - **CAIIS**: set `CAIIS_BASE_URL` and `CAIIS_MODEL` in `.env`, then select **Cloudera AI Inference** in the sidebar (or keep OpenAI for testing)
 
@@ -444,6 +478,31 @@ Static JSON under `data/dummy_cis/`:
 - `credit_cards.json` — card details by last-4
 - `mortgage_rates.json` — current rates
 - `product_faq.json` — onboarding, fees, fraud FAQ
+
+## Troubleshooting
+
+### Port 8000 already in use (`address already in use` on `0.0.0.0`)
+
+In Cloudera AI Workbench sessions, CDSW often reserves **8000** (and **8090** / **8080**) on the pod IP (`0.0.0.0`). The stock `nemoguardrails server` CLI always binds to `0.0.0.0`, which fails with `[Errno 98]`.
+
+This repo's `scripts/start_guardrails_server.sh` uses `pick_guardrails_bind()` (in `scripts/common_env.sh`) to listen on **`127.0.0.1:8000`** first, which is free even when the pod IP holds the port for the platform proxy.
+
+```bash
+bash scripts/start_guardrails_server.sh
+```
+
+Use the printed URL in the Streamlit sidebar (**Centralized Server** mode): `http://127.0.0.1:8000` (or `http://localhost:8000`).
+
+To force a different port: `GUARDRAILS_PORT=8001 bash scripts/start_guardrails_server.sh` and set the same URL in the sidebar.
+
+### Port 8090 already in use (Streamlit)
+
+Same pattern: `scripts/start_demo.sh` prefers **`127.0.0.1:8090`**. Open the CDSW session **Application** on port 8090 rather than binding Streamlit to `0.0.0.0`.
+
+### `CDP_TOKEN` not set for CAIIS
+
+Ensure `/home/cdsw/.env` (or `${ROOT}/.env`) contains `CDP_TOKEN=...`, or rely on CDSW's `/tmp/jwt`. `scripts/common_env.sh` loads `.env` with `set -a` so variables export to child processes.
+
 
 ## Limitations
 
