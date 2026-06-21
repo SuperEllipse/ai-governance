@@ -14,7 +14,7 @@ from src.agents.tools.cis_tools import (
     CREDIT_MORTGAGE_TOOLS,
     CUSTOMER_SERVICE_TOOLS,
 )
-from src.llm.provider import LLMConfig, create_crewai_llm
+from src.llm.provider import LLMConfig, create_crewai_llm, default_llm_config, format_llm_connection_error
 
 
 @dataclass
@@ -76,7 +76,7 @@ def _build_agents(llm_config: LLMConfig) -> tuple[Agent, Agent]:
 
 def run_banking_crew(query: str, llm_config: LLMConfig | None = None) -> tuple[str, AgentTrace]:
     """Run router → specialist agent workflow and return response + trace."""
-    cfg = llm_config or LLMConfig()
+    cfg = llm_config or default_llm_config()
     customer_agent, credit_agent = _build_agents(cfg)
     routed = route_query(query)
     specialist = credit_agent if routed == "credit_mortgage" else customer_agent
@@ -104,7 +104,7 @@ def run_banking_crew(query: str, llm_config: LLMConfig | None = None) -> tuple[s
         result = crew.kickoff()
         output = str(result)
     except Exception as exc:
-        output = f"Agent error: {exc}"
+        output = f"Agent error: {format_llm_connection_error(exc, cfg)}"
 
     trace = AgentTrace(
         routed_agent=agent_name,

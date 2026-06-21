@@ -16,6 +16,22 @@ CAIIS_DEFAULT_BASE_URL = (
     "https://ai-inference.YOUR-DOMAIN/namespaces/serving-default/endpoints/YOUR-MODEL/v1"
 )
 CAIIS_DEFAULT_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1"
+CAIIS_PLACEHOLDER_MARKERS = ("YOUR-DOMAIN", "YOUR-MODEL")
+
+
+def _load_project_env() -> None:
+    """Load .env when Streamlit is started without scripts/start_demo.sh."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    project_root = Path(__file__).resolve().parents[2]
+    for env_path in (project_root / ".env", Path("/home/cdsw/.env")):
+        if env_path.is_file():
+            load_dotenv(env_path, override=False)
+
+
+_load_project_env()
 
 
 @dataclass
@@ -46,6 +62,35 @@ def _read_cdp_token() -> str:
     return ""
 
 
+def is_caiis_configured() -> bool:
+    """True when CAIIS_BASE_URL is set to a non-placeholder endpoint."""
+    url = os.getenv("CAIIS_BASE_URL", "").strip()
+    if not url:
+        return False
+    return not any(marker in url for marker in CAIIS_PLACEHOLDER_MARKERS)
+
+
+def detect_default_provider() -> ProviderName:
+    """Pick the default sidebar provider from env (CAIIS when configured)."""
+    override = os.getenv("DEFAULT_LLM_PROVIDER", "").strip().lower()
+    if override in ("openai", "caiis"):
+        return override  # type: ignore[return-value]
+    if is_caiis_configured():
+        return "caiis"
+    if os.getenv("OPENAI_API_KEY", "").strip():
+        return "openai"
+    if _read_cdp_token():
+        return "caiis"
+    return "openai"
+
+
+def default_llm_config() -> LLMConfig:
+    """Default LLM config based on env (CAIIS when CAIIS_BASE_URL is set)."""
+    if detect_default_provider() == "caiis":
+        return default_caiis_config()
+    return default_openai_config()
+
+
 def default_openai_config() -> LLMConfig:
     return LLMConfig(
         provider="openai",
@@ -64,8 +109,11 @@ def default_caiis_config() -> LLMConfig:
     )
 
 
-def get_llm_config(provider: ProviderName | str = "openai", **overrides: Any) -> LLMConfig:
-    base = default_caiis_config() if provider == "caiis" else default_openai_config()
+def get_llm_config(
+    provider: ProviderName | str | None = None, **overrides: Any
+) -> LLMConfig:
+    resolved = provider or detect_default_provider()
+    base = default_caiis_config() if resolved == "caiis" else default_openai_config()
     for key, value in overrides.items():
         if value is not None and value != "" and hasattr(base, key):
             setattr(base, key, value)
@@ -74,14 +122,37 @@ def get_llm_config(provider: ProviderName | str = "openai", **overrides: Any) ->
     return base
 
 
+def format_llm_connection_error(exc: Exception, config: LLMConfig) -> str:
+    """Clarify CrewAI's generic 'OpenAI API' errors for CAIIS endpoints."""
+    msg = str(exc)
+    endpoint = config.base_url or "https://api.openai.com/v1"
+    provider_label = (
+        "Cloudera AI Inference (CAIIS)"
+        if config.provider == "caiis"
+        else "OpenAI-compatible endpoint"
+    )
+    if "Failed to connect to OpenAI API" in msg or "Connection error" in msg:
+        return (
+            f"LLM connection failed to {endpoint} ({provider_label}). "
+            "Verify VPN access, base URL, and auth token. "
+            f"Underlying error: {msg}"
+        )
+    return msg
+
+
 def create_crewai_llm(config: LLMConfig | None = None) -> LLM:
-    cfg = config or default_openai_config()
+    cfg = config or default_llm_config()
+    if cfg.provider == "caiis" and not cfg.api_key:
+        cfg.api_key = _read_cdp_token()
     kwargs: dict[str, Any] = {
         "model": cfg.model,
         "temperature": cfg.temperature,
     }
-    if cfg.api_key:
-        kwargs["api_key"] = cfg.api_key
+    api_key = cfg.api_key or (
+        _read_cdp_token() if cfg.provider == "caiis" else os.getenv("OPENAI_API_KEY", "")
+    )
+    if api_key:
+        kwargs["api_key"] = api_key
     if cfg.base_url:
         kwargs["base_url"] = cfg.base_url
     # CrewAI routes "nvidia/..." to LiteLLM; force OpenAI-compatible client for CAIIS.

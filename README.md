@@ -42,7 +42,7 @@ bash scripts/start_demo.sh
 
 Open the printed URL. In CDSW sessions, open the **Application** on port **8090** (Streamlit binds to `127.0.0.1:8090` because the pod IP already holds that port for the proxy).
 
-The Streamlit sidebar defaults to **OpenAI** provider and **Centralized Server** guardrails mode. Set server URL to `http://localhost:8000`.
+The Streamlit sidebar auto-selects **Cloudera AI Inference** when `CAIIS_BASE_URL` is set in `.env`; otherwise it defaults to **OpenAI**. Guardrails mode defaults to **Centralized Server** — set server URL to `http://localhost:8000`.
 
 ### Using Cloudera AI Inference (CAIIS)
 
@@ -96,6 +96,7 @@ ai-governance/
 | `CAIIS_BASE_URL` | Cloudera AI Inference endpoint `/v1` URL |
 | `CAIIS_MODEL` | Model deployed on CAIIS (e.g. `nvidia/llama-3.3-nemotron-super-49b-v1`) |
 | `CDP_TOKEN` | CDP auth token for CAIIS (or read from `/tmp/jwt` in CDSW) |
+| `DEFAULT_LLM_PROVIDER` | Optional override: `caiis` or `openai` (auto-detected from env when unset) |
 | `NVIDIA_API_KEY` | For NIM safety models (optional; default is `self_check`) |
 | `GUARDRAILS_SERVER_URL` | Centralized server URL (default: `http://localhost:8000`) |
 | `GUARDRAILS_PORT` | Guardrails server port (default: `8000`) |
@@ -368,7 +369,7 @@ export CDP_TOKEN="your-cdp-bearer-token"   # or /tmp/jwt in CDSW sessions
 
 Copy `.env.openai.example` or `.env.caiis.example` to `.env` and adjust values. In CDSW sessions, `scripts/common_env.sh` loads `/tmp/jwt` automatically when `CDP_TOKEN` is unset.
 
-**Switching in the UI:** Open the sidebar **LLM Provider** dropdown. **OpenAI** is selected by default. Choose **Cloudera AI Inference** to use CAIIS; Base URL and Model fields update to each provider's defaults.
+**Switching in the UI:** When `CAIIS_BASE_URL` is set in `.env`, the sidebar defaults to **Cloudera AI Inference**. Otherwise **OpenAI** is selected. Use the **LLM Provider** dropdown to switch; Base URL and Model fields update to each provider's defaults.
 
 ---
 
@@ -457,6 +458,21 @@ To force a different port: `GUARDRAILS_PORT=8001 bash scripts/start_guardrails_s
 ### Port 8090 already in use (Streamlit)
 
 Same pattern: `scripts/start_demo.sh` prefers **`127.0.0.1:8090`**. Open the CDSW session **Application** on port 8090 rather than binding Streamlit to `0.0.0.0`.
+
+**Option B — Streamlit sidebar:** when `.env` has CAIIS values, the sidebar selects **Cloudera AI Inference** automatically on first load. You can also switch the **LLM Provider** dropdown manually and confirm Base URL, Model, and CDP token.
+
+### `Failed to connect to OpenAI API` with CAIIS configured
+
+CrewAI uses an OpenAI-compatible HTTP client for **both** OpenAI and CAIIS, so connection errors often say "OpenAI API" even when the request went to your CAIIS endpoint.
+
+**Common causes:**
+
+1. **Wrong sidebar provider** — sidebar still on **OpenAI** while `.env` only has CAIIS vars. Select **Cloudera AI Inference**, or restart after setting `CAIIS_BASE_URL` (auto-selects CAIIS).
+2. **`.env` not loaded** — start the demo with `bash scripts/start_demo.sh` (loads `.env` via `scripts/common_env.sh`), not bare `streamlit run`.
+3. **Missing auth** — set `CDP_TOKEN` in `.env` or rely on `/tmp/jwt` in CDSW sessions.
+4. **VPN / endpoint** — confirm CAIIS with the same `CAIIS_BASE_URL` and `CDP_TOKEN` you used in the Step 4 curl test.
+
+Force provider explicitly: `DEFAULT_LLM_PROVIDER=caiis` in `.env`.
 
 ### `CDP_TOKEN` not set for CAIIS
 

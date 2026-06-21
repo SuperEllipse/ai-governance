@@ -25,7 +25,9 @@ from src.llm.provider import (
     SafetyModelConfig,
     default_caiis_config,
     default_openai_config,
+    detect_default_provider,
     get_llm_config,
+    is_caiis_configured,
 )
 from src.simulation.batch_runner import run_batch
 from src.simulation.queries import EXAMPLE_QUERIES, get_all_queries
@@ -59,11 +61,20 @@ def init_session_state() -> None:
 def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, list[str], str]:
     st.sidebar.header("⚙️ Settings")
 
+    provider_options = ["openai", "caiis"]
+    default_provider = detect_default_provider()
     provider = st.sidebar.selectbox(
         "LLM Provider",
-        ["openai", "caiis"],
+        provider_options,
+        index=provider_options.index(default_provider),
         format_func=lambda x: "OpenAI" if x == "openai" else "Cloudera AI Inference",
     )
+
+    if provider == "openai" and is_caiis_configured():
+        st.sidebar.warning(
+            "CAIIS is configured in .env but OpenAI is selected. "
+            "Choose **Cloudera AI Inference** to use your CAIIS endpoint."
+        )
 
     if provider == "openai":
         default_cfg = default_openai_config()
@@ -171,7 +182,6 @@ def render_chat_tab(
 
     query = st.text_area(
         "Customer Query",
-        value=st.session_state.get("query_input", ""),
         height=100,
         key="query_input",
     )

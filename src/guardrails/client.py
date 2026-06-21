@@ -12,7 +12,7 @@ import httpx
 from src.agents.banking_crew import run_banking_crew
 from src.guardrails.config_composer import compose_config
 from src.guardrails.violation_parser import ViolationRecord, parse_guardrails_output
-from src.llm.provider import LLMConfig, SafetyModelConfig
+from src.llm.provider import LLMConfig, SafetyModelConfig, default_llm_config
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +194,7 @@ class GuardrailsClient:
         safety_config: SafetyModelConfig | None = None,
         server_url: str = "http://localhost:8000",
     ):
-        self.llm_config = llm_config or LLMConfig()
+        self.llm_config = llm_config or default_llm_config()
         self.safety_config = safety_config or SafetyModelConfig()
         self.server_url = server_url.rstrip("/")
 

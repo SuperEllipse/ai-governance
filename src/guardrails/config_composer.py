@@ -151,3 +151,40 @@ def set_server_env(llm_config: LLMConfig) -> dict[str, str]:
     if llm_config.base_url:
         env["MAIN_MODEL_BASE_URL"] = llm_config.base_url
     return env
+
+
+def prepare_server_config_from_env(source_dir: Path | str) -> Path:
+    """Copy guardrails config and apply MAIN_MODEL_* / OPENAI env overrides.
+
+    NeMo server only patches the main model from env; safety_check rails still
+    read config.yml. This ensures both main and safety_check models use CAIIS.
+    """
+    src = Path(source_dir)
+    base_url = os.environ.get("MAIN_MODEL_BASE_URL", "").strip()
+    model_name = os.environ.get("MAIN_MODEL_NAME", "").strip()
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+
+    if not base_url and not model_name and not api_key:
+        return src
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="nemo_guardrails_server_"))
+    shutil.copytree(src, tmp_dir, dirs_exist_ok=True)
+
+    config_path = tmp_dir / "config.yml"
+    merged = _load_yaml(config_path)
+    models = merged.get("models") or []
+    for model in models:
+        if model.get("engine") != "openai":
+            continue
+        params = model.setdefault("parameters", {})
+        if base_url:
+            params["base_url"] = base_url
+        if api_key:
+            params["api_key"] = api_key
+        if model_name:
+            model["model"] = model_name
+
+    with config_path.open("w") as f:
+        yaml.dump(merged, f, default_flow_style=False)
+
+    return tmp_dir

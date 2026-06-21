@@ -6,6 +6,11 @@ import argparse
 import logging
 import os
 import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def main() -> int:
@@ -32,7 +37,9 @@ def main() -> int:
     set_deployment_type(DeploymentTypeEnum.API.value)
 
     config_path = os.path.expanduser(args.config.rstrip(os.path.sep))
-    setattr(api.app, "rails_config_path", config_path)
+    from src.guardrails.config_composer import prepare_server_config_from_env
+
+    config_path = str(prepare_server_config_from_env(config_path))
 
     if args.default_config_id:
         api.set_default_config_id(args.default_config_id)
