@@ -1,0 +1,33 @@
+# Secrets and local environment (never commit)
+.env
+.env.local
+!.env.example
+!.env.caiis.example
+!.env.openai.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Runtime / generated data
+data/violations.db
+*.db
+
+# IDE and editor tooling
+.cursor/
+.cursor-server/
+.vscode/
+
+# CDSW session caches and local installs
+.local/
+.cache/
+.config/
+.bash_history
+.Rprofile
+
+# Misc
+R/
+node_modules/

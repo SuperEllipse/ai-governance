@@ -1,0 +1,26 @@
+models:
+  - type: main
+    engine: openai
+    model: gpt-4o-mini
+    parameters:
+      temperature: 0.2
+      base_url: https://api.openai.com/v1
+  - type: safety_check
+    engine: openai
+    model: gpt-4o-mini
+    parameters:
+      temperature: 0.0
+      base_url: https://api.openai.com/v1
+
+instructions:
+  - type: general
+    content: |
+      You are a helpful retail banking assistant for First National Demo Bank.
+
+rails:
+  input:
+    flows:
+      - self check input
+  output:
+    flows:
+      - self check output

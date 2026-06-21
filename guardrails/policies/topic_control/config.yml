@@ -1,0 +1,11 @@
+models: []
+
+instructions:
+  - type: general
+    content: |
+      Only answer questions about retail banking services.
+
+rails:
+  input:
+    flows:
+      - self check input

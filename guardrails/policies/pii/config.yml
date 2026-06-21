@@ -1,0 +1,37 @@
+models: []
+
+rails:
+  config:
+    sensitive_data_detection:
+      recognizers:
+        - name: us_ssn_pattern
+          supported_entity: US_SSN
+          patterns:
+            - name: ssn_dashed
+              regex: '\b\d{3}-\d{2}-\d{4}\b'
+              score: 0.9
+            - name: ssn_digits
+              regex: '\b\d{9}\b'
+              score: 0.85
+      input:
+        score_threshold: 0.4
+        entities:
+          - US_SSN
+          - CREDIT_CARD
+          - EMAIL_ADDRESS
+          - PHONE_NUMBER
+          - PERSON
+      output:
+        score_threshold: 0.4
+        entities:
+          - US_SSN
+          - CREDIT_CARD
+          - EMAIL_ADDRESS
+          - PHONE_NUMBER
+          - PERSON
+  input:
+    flows:
+      - detect sensitive data on input
+  output:
+    flows:
+      - detect sensitive data on output

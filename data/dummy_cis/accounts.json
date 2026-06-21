@@ -1,0 +1,12 @@
+[
+  {"account_id": "ACC-2001", "customer_id": "CUST-1001", "type": "checking", "balance": 4521.33, "open_date": "2019-03-15", "status": "active"},
+  {"account_id": "ACC-2002", "customer_id": "CUST-1001", "type": "savings", "balance": 12800.00, "open_date": "2019-03-15", "status": "active"},
+  {"account_id": "ACC-2003", "customer_id": "CUST-1002", "type": "checking", "balance": 892.17, "open_date": "2020-07-22", "status": "active"},
+  {"account_id": "ACC-2004", "customer_id": "CUST-1003", "type": "checking", "balance": 15600.45, "open_date": "2018-01-10", "status": "active"},
+  {"account_id": "ACC-2005", "customer_id": "CUST-1003", "type": "savings", "balance": 45000.00, "open_date": "2018-01-10", "status": "active"},
+  {"account_id": "ACC-2006", "customer_id": "CUST-1004", "type": "checking", "balance": 234.56, "open_date": "2022-11-05", "status": "active"},
+  {"account_id": "ACC-2007", "customer_id": "CUST-1005", "type": "checking", "balance": 3200.00, "open_date": "2021-04-18", "status": "active"},
+  {"account_id": "ACC-2008", "customer_id": "CUST-1006", "type": "savings", "balance": 5600.78, "open_date": "2020-09-30", "status": "active"},
+  {"account_id": "ACC-2009", "customer_id": "CUST-1007", "type": "checking", "balance": 22100.00, "open_date": "2017-06-12", "status": "active"},
+  {"account_id": "ACC-2010", "customer_id": "CUST-1008", "type": "checking", "balance": 150.00, "open_date": "2023-02-28", "status": "frozen"}
+]

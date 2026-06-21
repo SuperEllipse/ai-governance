@@ -1,0 +1,12 @@
+nemoguardrails[server,sdd,jailbreak,openai]
+crewai
+streamlit
+plotly
+pandas
+openai
+httpx
+pyyaml
+python-dotenv
+presidio-analyzer
+presidio-anonymizer
+spacy

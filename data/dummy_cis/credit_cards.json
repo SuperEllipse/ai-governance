@@ -1,0 +1,8 @@
+[
+  {"card_id": "CC-3001", "customer_id": "CUST-1001", "card_type": "Visa Platinum", "last_four": "4521", "balance": 1245.67, "due_date": "2026-07-15", "min_payment": 35.00, "apr": 18.99},
+  {"card_id": "CC-3002", "customer_id": "CUST-1002", "card_type": "Mastercard Gold", "last_four": "7832", "balance": 456.00, "due_date": "2026-07-22", "min_payment": 25.00, "apr": 21.49},
+  {"card_id": "CC-3003", "customer_id": "CUST-1003", "card_type": "Visa Signature", "last_four": "2198", "balance": 0.00, "due_date": "2026-07-10", "min_payment": 0.00, "apr": 15.99},
+  {"card_id": "CC-3004", "customer_id": "CUST-1005", "card_type": "Visa Classic", "last_four": "9012", "balance": 890.23, "due_date": "2026-07-18", "min_payment": 30.00, "apr": 22.99},
+  {"card_id": "CC-3005", "customer_id": "CUST-1007", "card_type": "Amex Platinum", "last_four": "5589", "balance": 3200.00, "due_date": "2026-07-05", "min_payment": 96.00, "apr": 17.49},
+  {"card_id": "CC-3006", "customer_id": "CUST-1009", "card_type": "Visa Rewards", "last_four": "8844", "balance": 567.89, "due_date": "2026-07-25", "min_payment": 25.00, "apr": 19.99}
+]

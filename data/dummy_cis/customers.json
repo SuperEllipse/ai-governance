@@ -1,0 +1,12 @@
+[
+  {"customer_id": "CUST-1001", "name": "Alice Johnson", "tier": "gold", "masked_account": "****4521", "email": "alice.j@email.com"},
+  {"customer_id": "CUST-1002", "name": "Bob Martinez", "tier": "silver", "masked_account": "****7832", "email": "bob.m@email.com"},
+  {"customer_id": "CUST-1003", "name": "Carol Chen", "tier": "platinum", "masked_account": "****2198", "email": "carol.c@email.com"},
+  {"customer_id": "CUST-1004", "name": "David Kim", "tier": "standard", "masked_account": "****6644", "email": "david.k@email.com"},
+  {"customer_id": "CUST-1005", "name": "Eva Thompson", "tier": "gold", "masked_account": "****9012", "email": "eva.t@email.com"},
+  {"customer_id": "CUST-1006", "name": "Frank Wilson", "tier": "silver", "masked_account": "****3377", "email": "frank.w@email.com"},
+  {"customer_id": "CUST-1007", "name": "Grace Lee", "tier": "platinum", "masked_account": "****5589", "email": "grace.l@email.com"},
+  {"customer_id": "CUST-1008", "name": "Henry Brown", "tier": "standard", "masked_account": "****1123", "email": "henry.b@email.com"},
+  {"customer_id": "CUST-1009", "name": "Iris Davis", "tier": "gold", "masked_account": "****8844", "email": "iris.d@email.com"},
+  {"customer_id": "CUST-1010", "name": "James Miller", "tier": "silver", "masked_account": "****7766", "email": "james.m@email.com"}
+]

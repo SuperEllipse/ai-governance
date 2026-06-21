@@ -1,0 +1,14 @@
+models: []
+
+rails:
+  input:
+    flows:
+      - self check input
+  output:
+    flows:
+      - self check output
+
+instructions:
+  - type: general
+    content: |
+      Reject discriminatory, biased, or toxic content in banking conversations.

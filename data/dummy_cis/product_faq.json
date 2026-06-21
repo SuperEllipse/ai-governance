@@ -1,0 +1,10 @@
+[
+  {"topic": "open_account", "question": "How do I open a checking account?", "answer": "Visit any branch with a valid government ID and proof of address, or apply online at our website. Minimum deposit is $25 for standard checking."},
+  {"topic": "branch_hours", "question": "What are your branch hours?", "answer": "Monday-Friday 9am-5pm, Saturday 10am-2pm. Drive-through opens 30 minutes earlier on weekdays."},
+  {"topic": "fees", "question": "What is your fee schedule?", "answer": "Standard checking: $12/month (waived with $1,500 minimum balance). Overdraft fee: $35. Wire transfer: $25 domestic, $45 international."},
+  {"topic": "savings", "question": "What savings products do you offer?", "answer": "High-yield savings (4.25% APY), money market accounts, and CDs from 6 months to 5 years."},
+  {"topic": "fraud", "question": "How do I report fraud?", "answer": "Call our 24/7 fraud hotline at 1-800-555-FRAUD or lock your card instantly in the mobile app."},
+  {"topic": "mobile_banking", "question": "How do I set up mobile banking?", "answer": "Download our app, enter your account number and verify via SMS. Enable biometric login for faster access."},
+  {"topic": "wire_transfer", "question": "How do I send a wire transfer?", "answer": "Wires can be initiated in-branch or via online banking for accounts with 2FA enabled. Processing takes 1-2 business days."},
+  {"topic": "loan_application", "question": "How do I apply for a personal loan?", "answer": "Apply online or in-branch. You'll need proof of income, credit check authorization, and valid ID. Decisions typically within 24 hours."}
+]

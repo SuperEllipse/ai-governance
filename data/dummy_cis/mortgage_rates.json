@@ -1,0 +1,11 @@
+{
+  "last_updated": "2026-06-18",
+  "rates": {
+    "fixed_15yr": {"rate": 5.875, "apr": 6.012, "points": 0.5},
+    "fixed_30yr": {"rate": 6.375, "apr": 6.498, "points": 0.75},
+    "arm_5_1": {"rate": 5.625, "apr": 6.125, "points": 0.25, "adjustment_cap": 2.0},
+    "arm_7_1": {"rate": 5.750, "apr": 6.200, "points": 0.25, "adjustment_cap": 2.0},
+    "jumbo_30yr": {"rate": 6.625, "apr": 6.750, "points": 1.0}
+  },
+  "disclaimer": "Rates shown are for demonstration only. Actual rates vary by credit score, loan amount, and property location."
+}
