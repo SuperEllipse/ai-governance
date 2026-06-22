@@ -120,13 +120,27 @@ ai-governance/
 | `GUARDRAILS_SERVER_URL` | Centralized server URL (default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
 | `GUARDRAILS_PORT` | **Session/bash only:** preferred bind port for `start_guardrails_server.sh` (example: `8001`; script may pick 8000→8001→8080). **Ignored in CAI Application mode.** |
 | `STREAMLIT_PORT` | UI port override (checked before auto-detect) |
-| `CDSW_APP_PORT` | **CAI Application mode:** platform-injected bind port (e.g. `8100`); required on `0.0.0.0`. Also used in sessions when set. |
+| `CDSW_APP_PORT` | **CAI Application mode (Streamlit):** platform-injected contributor port; bind on `127.0.0.1` only. Also used in sessions when set. |
+| `CDSW_READONLY_PORT` | **CAI Application mode (optional):** read-only access port; bind on `127.0.0.1`. Set `CAI_BIND_PORT_KEY=CDSW_READONLY_PORT` on guardrails to use this port. |
+| `CDSW_PUBLIC_PORT` | **Deprecated** platform port for all users; still supported for guardrails fallback. |
+| `CAI_BIND_PORT_KEY` | Optional guardrails Application override: `CDSW_APP_PORT`, `CDSW_READONLY_PORT`, or `CDSW_PUBLIC_PORT` |
 
 ## Cloudera AI Applications
 
-Deploy this demo as **two separate long-running Applications** in Cloudera AI (per [CAI Applications docs](https://docs.cloudera.com/machine-learning/cloud/applications/topics/ml-applications-c.html)). Each application runs a Python entry script that binds to **`CDSW_APP_PORT`** (or **`CDSW_READONLY_PORT`**) on `0.0.0.0` when launched as an Application.
+Deploy this demo as **two separate long-running Applications** in Cloudera AI (per [CAI Applications docs](https://docs.cloudera.com/machine-learning/cloud/applications/topics/ml-applications-c.html)). Each Application runs in its **own engine** and receives its own platform-injected `CDSW_APP_PORT`.
 
-> **Port behavior:** Cloudera AI injects `CDSW_APP_PORT` (commonly `8100`). Application entry scripts **always** bind to that port — setting `GUARDRAILS_PORT=8001` in the Application UI does **not** change the bind port. `GUARDRAILS_PORT` is only used in session/bash mode (`start_guardrails_server.sh`). Cross-app communication uses each application's **public HTTPS URL**, not `localhost` or loopback ports.
+> **Localhost bind (required):** Per [Cloudera CDSW embedded web app docs](https://docs.cloudera.com/cdsw/1.10.5/embedded-web-apps/topics/cdsw-tensorboard--shiny--and-others--cdsw-app-port-or-cdsw-readonly-port-.html), entry scripts must bind to **`127.0.0.1` (localhost)** — not `0.0.0.0`. The platform proxy forwards public HTTPS traffic to the loopback port.
+
+> **Three platform ports:** Cloudera injects up to three ports per engine ([port availability limits](https://docs.cloudera.com/cdsw/1.10.5/embedded-web-apps/topics/cdsw-limitations-with-port-availability.html)):
+> - **`CDSW_APP_PORT`** — contributor control (default for Streamlit and guardrails)
+> - **`CDSW_READONLY_PORT`** — read-only access (optional for guardrails via `CAI_BIND_PORT_KEY=CDSW_READONLY_PORT`)
+> - **`CDSW_PUBLIC_PORT`** — all users (deprecated; guardrails falls back to this if set)
+>
+> Only **one web app per port per engine** (max three simultaneous apps per engine). **Never hardcode** port numbers — the platform assigns them (e.g. `8090`, `8100`).
+
+> **Port behavior:** Application entry scripts bind to the platform-injected port on `127.0.0.1`. Setting `GUARDRAILS_PORT=8001` in the Application UI does **not** change the bind port. `GUARDRAILS_PORT` is only used in session/bash mode (`start_guardrails_server.sh`). Cross-app communication uses each application's **public HTTPS URL**, not `localhost` or loopback ports.
+
+> **Two Applications = two engines:** Register guardrails and Streamlit as separate Applications so each gets its own `CDSW_APP_PORT` and public subdomain URL.
 
 ### Application 1 — NeMo Guardrails server
 
@@ -143,8 +157,9 @@ Deploy this demo as **two separate long-running Applications** in Cloudera AI (p
 - `CAIIS_BASE_URL`, `CAIIS_MODEL`, `CDP_TOKEN` — when using Cloudera AI Inference
 - `OPENAI_API_KEY`, `OPENAI_MODEL` — when using OpenAI
 - `GUARDRAILS_CONFIG` — optional; defaults to `guardrails/`
+- `CAI_BIND_PORT_KEY` — optional; set to `CDSW_READONLY_PORT` to expose guardrails on the read-only port instead of `CDSW_APP_PORT`
 
-`CDSW_APP_PORT` is injected by the platform (e.g. `8100`); the script binds automatically. Do **not** rely on `GUARDRAILS_PORT` here — it is ignored in application mode. After deploy, copy this app's **public HTTPS URL** for Application 2.
+`CDSW_APP_PORT` is injected by the platform; the script binds to `127.0.0.1` on that port automatically. Do **not** rely on `GUARDRAILS_PORT` here — it is ignored in application mode. After deploy, copy this app's **public HTTPS URL** for Application 2.
 
 ### Application 2 — Streamlit banking demo
 

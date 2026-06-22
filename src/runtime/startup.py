@@ -11,6 +11,9 @@ from typing import Literal
 Mode = Literal["session", "application"]
 Service = Literal["streamlit", "guardrails"]
 
+_CAI_PORT_KEYS = ("CDSW_APP_PORT", "CDSW_READONLY_PORT", "CDSW_PUBLIC_PORT")
+_CAI_BIND_PORT_KEY_ENV = "CAI_BIND_PORT_KEY"
+
 
 def _looks_like_project_root(path: Path) -> bool:
     return (path / "guardrails").is_dir() and (path / "applications").is_dir()
@@ -168,27 +171,55 @@ def _parse_port_env(key: str) -> int | None:
         return None
 
 
-def _application_bind_port() -> int:
-    for key in ("CDSW_APP_PORT", "CDSW_READONLY_PORT"):
+def _application_bind_port(service: Service) -> tuple[int, str]:
+    """Return ``(port, env_key)`` for Cloudera AI Application mode."""
+    if service == "streamlit":
+        port = _parse_port_env("CDSW_APP_PORT")
+        if port is not None:
+            return port, "CDSW_APP_PORT"
+        raise RuntimeError(
+            "Streamlit in Cloudera AI Application mode requires CDSW_APP_PORT "
+            "to be injected by the platform. Do not hardcode port numbers; "
+            "register Streamlit as its own Application so the platform assigns a port."
+        )
+
+    bind_key = os.environ.get(_CAI_BIND_PORT_KEY_ENV, "").strip()
+    if bind_key:
+        if bind_key not in _CAI_PORT_KEYS:
+            raise RuntimeError(
+                f"Invalid {_CAI_BIND_PORT_KEY_ENV}={bind_key!r}. "
+                f"Must be one of: {', '.join(_CAI_PORT_KEYS)}."
+            )
+        port = _parse_port_env(bind_key)
+        if port is None:
+            raise RuntimeError(
+                f"{_CAI_BIND_PORT_KEY_ENV}={bind_key!r} but {bind_key} is not set."
+            )
+        return port, bind_key
+
+    for key in _CAI_PORT_KEYS:
         port = _parse_port_env(key)
         if port is not None:
-            return port
+            return port, key
+
     raise RuntimeError(
-        "Application mode requires CDSW_APP_PORT (or CDSW_READONLY_PORT) to be set."
+        "Guardrails server in Cloudera AI Application mode requires at least one of "
+        f"{', '.join(_CAI_PORT_KEYS)} to be injected by the platform."
     )
 
 
 def _pick_application_bind(service: Service) -> tuple[str, int]:
-    """Bind CDSW application port on loopback first; CDSW holds 0.0.0.0 on the pod."""
-    port = _application_bind_port()
+    """Bind the platform port on localhost only (per Cloudera CDSW docs)."""
+    port, port_key = _application_bind_port(service)
     label = "Streamlit" if service == "streamlit" else "guardrails server"
-    for host in ("127.0.0.1", "0.0.0.0"):
-        if _can_bind(host, port):
-            return host, port
-    raise RuntimeError(
-        f"Could not bind {label} to port {port} on 127.0.0.1 or 0.0.0.0 "
-        f"(CDSW platform may already hold 0.0.0.0:{port})."
-    )
+    host = "127.0.0.1"
+    if not _can_bind(host, port):
+        raise RuntimeError(
+            f"Could not bind {label} to {host}:{port} ({port_key}). "
+            "Only one web app may bind each platform port per engine; "
+            "see Cloudera docs on port availability."
+        )
+    return host, port
 
 
 def pick_bind(mode: Mode, service: Service) -> tuple[str, int]:
@@ -237,31 +268,72 @@ def get_guardrails_config_path(project_root: Path | None = None) -> Path:
     return path
 
 
-def _application_port_env_line(port: int) -> str:
-    """Explain which platform env var selected the bind port in application mode."""
-    suffix = (
-        "(required for Cloudera AI Applications; "
-        "GUARDRAILS_PORT is ignored in application mode)"
-    )
-    for key in ("CDSW_APP_PORT", "CDSW_READONLY_PORT"):
+def _application_port_key(service: Service, port: int) -> str:
+    """Resolve which platform env var selected the bind port."""
+    if service == "streamlit":
+        return "CDSW_APP_PORT"
+
+    bind_key = os.environ.get(_CAI_BIND_PORT_KEY_ENV, "").strip()
+    if bind_key in _CAI_PORT_KEYS:
+        return bind_key
+
+    for key in _CAI_PORT_KEYS:
         raw = os.environ.get(key)
         if raw and str(port) == raw.strip():
-            return f"Using {key}={port} {suffix}"
-    return f"Using port {port} {suffix}"
+            return key
+    return "CDSW_APP_PORT"
 
 
-def _cdsw_loopback_proxy_line(bind_host: str, port: int) -> str | None:
+def _cdsw_public_url_pattern(port_key: str) -> str:
+    patterns = {
+        "CDSW_APP_PORT": "https://<$CDSW_ENGINE_ID>.<$CDSW_DOMAIN>",
+        "CDSW_READONLY_PORT": "https://read-only-<$CDSW_ENGINE_ID>.<$CDSW_DOMAIN>",
+        "CDSW_PUBLIC_PORT": "https://public-<$CDSW_ENGINE_ID>.<$CDSW_DOMAIN>",
+    }
+    return patterns.get(port_key, f"({port_key})")
+
+
+def _cdsw_public_url_resolved(port_key: str) -> str | None:
+    engine_id = os.environ.get("CDSW_ENGINE_ID")
+    domain = os.environ.get("CDSW_DOMAIN")
+    if not engine_id or not domain:
+        return None
+    if port_key == "CDSW_APP_PORT":
+        return f"https://{engine_id}.{domain}"
+    if port_key == "CDSW_READONLY_PORT":
+        return f"https://read-only-{engine_id}.{domain}"
+    if port_key == "CDSW_PUBLIC_PORT":
+        return f"https://public-{engine_id}.{domain}"
+    return None
+
+
+def _application_port_env_line(service: Service, port: int) -> str:
+    """Explain which platform env var selected the bind port in application mode."""
+    port_key = _application_port_key(service, port)
+    suffix = (
+        "(platform-injected; GUARDRAILS_PORT is ignored in application mode)"
+    )
+    return f"Using {port_key}={port} {suffix}"
+
+
+def _cdsw_loopback_proxy_line(service: Service, bind_host: str, port: int) -> str | None:
     """Note when loopback bind relies on the CDSW application proxy."""
     if bind_host != "127.0.0.1":
         return None
-    for key in ("CDSW_APP_PORT", "CDSW_READONLY_PORT"):
-        raw = os.environ.get(key)
-        if raw and str(port) == raw.strip():
-            return (
-                f"  CDSW proxy: bound to 127.0.0.1:{port}; "
-                f"public Application traffic ({key}) is forwarded to this loopback port."
-            )
-    return None
+    port_key = _application_port_key(service, port)
+    return (
+        f"  CDSW proxy: bound to 127.0.0.1:{port} (localhost per Cloudera docs); "
+        f"public traffic on {port_key} is forwarded to this loopback port."
+    )
+
+
+def _cdsw_public_url_line(service: Service, port: int) -> str:
+    port_key = _application_port_key(service, port)
+    resolved = _cdsw_public_url_resolved(port_key)
+    pattern = _cdsw_public_url_pattern(port_key)
+    if resolved:
+        return f"  Session public URL ({port_key}): {resolved}"
+    return f"  Session public URL ({port_key}): {pattern}"
 
 
 def print_startup_banner(
@@ -284,15 +356,19 @@ def print_startup_banner(
         print(f"  (http://localhost:{port} also works on the same machine)")
         print("")
         if mode == "application":
-            print(f"  {_application_port_env_line(port)}")
-            proxy_line = _cdsw_loopback_proxy_line(bind_host, port)
+            print(f"  {_application_port_env_line(service, port)}")
+            proxy_line = _cdsw_loopback_proxy_line(service, bind_host, port)
             if proxy_line:
                 print(proxy_line)
-            print("  GUARDRAILS_PORT only applies to session/bash mode (start_guardrails_server.sh).")
-            print("  Cloudera AI Application: use the public HTTPS URL for this app.")
+            print(_cdsw_public_url_line(service, port))
             print(
-                "  On Application 2 (Streamlit), set GUARDRAILS_SERVER_URL to that public "
-                "HTTPS URL — not http://127.0.0.1:8001 or localhost."
+                "  CAI Application public URL: https://<subdomain>.<YOUR-CAI-DOMAIN> "
+                "(set subdomain in the Application UI)."
+            )
+            print("  GUARDRAILS_PORT only applies to session/bash mode (start_guardrails_server.sh).")
+            print(
+                "  On Application 2 (Streamlit), set GUARDRAILS_SERVER_URL to Application 1's "
+                "public HTTPS URL — not http://127.0.0.1 or localhost."
             )
         else:
             print("  Add to .env (match this port):")
@@ -319,15 +395,19 @@ def print_startup_banner(
         )
 
     if mode == "application":
-        print(f"  {_application_port_env_line(port)}")
-        proxy_line = _cdsw_loopback_proxy_line(bind_host, port)
+        print(f"  {_application_port_env_line(service, port)}")
+        proxy_line = _cdsw_loopback_proxy_line(service, bind_host, port)
         if proxy_line:
             print(proxy_line)
+        print(_cdsw_public_url_line(service, port))
+        print(
+            "  CAI Application public URL: https://<subdomain>.<YOUR-CAI-DOMAIN> "
+            "(e.g. https://banking-demo.YOUR-CAI-DOMAIN)."
+        )
         print("  GUARDRAILS_PORT only applies to session/bash mode.")
-        print("  Cloudera AI Application: open the public HTTPS URL for this app.")
         print(
             "  Set GUARDRAILS_SERVER_URL to Application 1's public HTTPS URL "
-            "(e.g. https://nemo-guardrails.YOUR-CAI-DOMAIN), not localhost:8001."
+            "(e.g. https://nemo-guardrails.YOUR-CAI-DOMAIN), not localhost."
         )
     elif os.environ.get("CDSW_DOMAIN") and os.environ.get("CDSW_MASTER_ID"):
         owner = ""

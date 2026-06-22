@@ -44,6 +44,8 @@ from src.runtime.startup import (  # noqa: E402
     setup_pythonpath,
 )
 
+_CAI_PLATFORM_PORT_KEYS = ("CDSW_APP_PORT", "CDSW_READONLY_PORT", "CDSW_PUBLIC_PORT")
+
 
 def _script_anchor() -> str | None:
     try:
@@ -55,7 +57,7 @@ def _script_anchor() -> str | None:
 def _detect_mode(cli_mode: str | None) -> str:
     if cli_mode:
         return cli_mode
-    if os.environ.get("CDSW_APP_PORT") or os.environ.get("CDSW_READONLY_PORT"):
+    if any(os.environ.get(key) for key in _CAI_PLATFORM_PORT_KEYS):
         return "application"
     return "session"
 
@@ -71,7 +73,10 @@ def _parse_args() -> argparse.Namespace:
         "--mode",
         choices=("session", "application"),
         default=None,
-        help="Bind strategy: application uses CDSW_APP_PORT on loopback (127.0.0.1) with CDSW proxy.",
+        help=(
+            "Bind strategy: application binds localhost (127.0.0.1) on CDSW_APP_PORT "
+            "injected by the platform."
+        ),
     )
     args, _unknown = parser.parse_known_args()
     return args
@@ -122,7 +127,7 @@ _main_started = False
 def _should_autostart() -> bool:
     if __name__ == "__main__":
         return True
-    if os.environ.get("CDSW_APP_PORT") or os.environ.get("CDSW_READONLY_PORT"):
+    if any(os.environ.get(key) for key in _CAI_PLATFORM_PORT_KEYS):
         return True
     return _running_under_ipykernel()
 
