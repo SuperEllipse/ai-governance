@@ -34,7 +34,7 @@ from src.llm.provider import (
     is_caiis_configured,
 )
 from src.simulation.batch_runner import run_batch
-from src.simulation.queries import EXAMPLE_QUERIES, get_all_queries
+from src.simulation.queries import EXAMPLE_QUERIES, ExampleQuery, get_all_queries
 
 def default_guardrails_server_url() -> str:
     """Sidebar default: GUARDRAILS_PORT (CDSW often 8001), else GUARDRAILS_SERVER_URL."""
@@ -65,10 +65,76 @@ def init_session_state() -> None:
         "last_result": None,
         "batch_summary": None,
         "selected_violation": None,
+        "demo_suggestion": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
+
+
+def _block_type_badge(block_type: str) -> str:
+    if block_type == "Happy path":
+        return "🟢"
+    if block_type.startswith("Input block"):
+        return "🔴"
+    if block_type.startswith("Output block"):
+        return "🟠"
+    return "⚪"
+
+
+def _format_mode_label(mode: str) -> str:
+    return {
+        "embedded": "Embedded",
+        "server": "Centralized Server",
+        "unguarded": "Unguarded Only",
+    }.get(mode, mode)
+
+
+def _format_policy_keys(keys: list[str]) -> str:
+    if not keys:
+        return "none (happy path)"
+    labels = {v: k for k, v in POLICY_OPTIONS.items()}
+    return ", ".join(labels.get(k, k) for k in keys)
+
+
+def render_demo_guide() -> None:
+    with st.expander("Demo guide: block types", expanded=False):
+        st.markdown(
+            """
+            **Execution modes**
+            - **Centralized Server** — uses `guardrails/base/config.yml` only (`self_check` input + output).
+              Policy checkboxes do **not** change server config. Best for investment-advice / topic blocks
+              you already see with server mode.
+            - **Embedded** — composes policies from sidebar checkboxes via `config_composer`.
+              Uses separate `check()` on input then output — **best for PII input blocks and output
+              policy blocks** (e.g. missing FDIC disclaimer).
+            """
+        )
+        rows = []
+        for ex in EXAMPLE_QUERIES:
+            rows.append(
+                {
+                    "Example": ex["label"],
+                    "Block type": ex["block_type"],
+                    "Mode": _format_mode_label(ex["recommended_mode"]),
+                    "Policies": _format_policy_keys(ex["recommended_policies"]),
+                    "Expected rail": ex["expected_rail"] or "— (passes)",
+                }
+            )
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.caption(
+            "Output-block demos may pass if the agent already includes required disclaimers. "
+            "Try Embedded mode and expand **Guardrails Log** to see `triggered_output_rail`."
+        )
+
+
+def apply_example_suggestion(example: ExampleQuery) -> None:
+    st.session_state["query_input"] = example["query"]
+    st.session_state["demo_suggestion"] = example
+    st.session_state["execution_mode"] = _format_mode_label(example["recommended_mode"])
+    suggested = set(example["recommended_policies"])
+    for _label, policy_key in POLICY_OPTIONS.items():
+        st.session_state[f"policy_{policy_key}"] = policy_key in suggested
 
 
 def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, list[str], str]:
@@ -136,9 +202,13 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
     safety_config = SafetyModelConfig(mode=safety_mode, nim_api_key=nim_key)
 
     st.sidebar.subheader("Guardrails Mode")
+    mode_options = ["Centralized Server", "Embedded", "Unguarded Only"]
+    if "execution_mode" not in st.session_state:
+        st.session_state["execution_mode"] = "Centralized Server"
     mode_label = st.sidebar.selectbox(
         "Execution Mode",
-        ["Centralized Server", "Embedded", "Unguarded Only"],
+        mode_options,
+        key="execution_mode",
         help="Centralized Server (recommended): NeMo server (often :8001 on CDSW). "
         "Embedded: in-process LLMRails. Unguarded: no safety rails.",
     )
@@ -153,10 +223,22 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
         value=default_guardrails_server_url(),
     )
 
+    suggestion = st.session_state.get("demo_suggestion")
+    if suggestion:
+        st.sidebar.info(
+            f"**Demo tip — {suggestion['label']}**\n\n"
+            f"Mode: **{_format_mode_label(suggestion['recommended_mode'])}** · "
+            f"Policies: {_format_policy_keys(suggestion['recommended_policies'])}\n\n"
+            f"Expected rail: `{suggestion['expected_rail'] or 'none'}`"
+        )
+
     st.sidebar.subheader("Active Policies")
     selected_policies: list[str] = []
     for label, key in POLICY_OPTIONS.items():
-        if st.sidebar.checkbox(label, value=True):
+        policy_key = f"policy_{key}"
+        if policy_key not in st.session_state:
+            st.session_state[policy_key] = True
+        if st.sidebar.checkbox(label, key=policy_key):
             selected_policies.append(key)
 
     return llm_config, safety_config, mode, selected_policies, server_url
@@ -207,12 +289,24 @@ def render_chat_tab(
     st.header("💬 Chat Compare")
     st.caption("Side-by-side guarded vs unguarded responses with agent trace.")
 
+    render_demo_guide()
+
     for row_start in range(0, len(EXAMPLE_QUERIES), 3):
         col_btns = st.columns(3)
         for j, example in enumerate(EXAMPLE_QUERIES[row_start : row_start + 3]):
-            label = example if len(example) <= 42 else example[:42] + "…"
-            if col_btns[j].button(label, key=f"ex_{row_start + j}"):
-                st.session_state["query_input"] = example
+            badge = _block_type_badge(example["block_type"])
+            with col_btns[j]:
+                st.caption(f"{badge} **{example['block_type']}**")
+                if st.button(example["label"], key=f"ex_{row_start + j}", use_container_width=True):
+                    apply_example_suggestion(example)
+
+    if st.session_state.get("demo_suggestion"):
+        ex = st.session_state["demo_suggestion"]
+        st.caption(
+            f"Selected demo: **{ex['label']}** — use "
+            f"**{_format_mode_label(ex['recommended_mode'])}** with "
+            f"{_format_policy_keys(ex['recommended_policies'])}"
+        )
 
     query = st.text_area(
         "Customer Query",

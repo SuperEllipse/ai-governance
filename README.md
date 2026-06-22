@@ -408,7 +408,16 @@ Copy `.env.openai.example` or `.env.caiis.example` to `.env` and adjust values. 
 
 ### Walkthrough tips for presenters
 
-- Use the **example query buttons** at the top of Chat Compare (six Indian-context prompts from `EXAMPLE_QUERIES` in `src/simulation/queries.py`): savings account opening, credit card due date, home loan rates, Aadhaar PII demo, Bitcoin off-topic, and jailbreak.
+- Use the **example query buttons** at the top of Chat Compare — each shows a **block-type badge** (input vs output vs happy path). Open **Demo guide: block types** in the UI for mode and policy recommendations.
+
+| Example | Block type | Recommended mode | Policies | Expected rail |
+|---------|------------|------------------|----------|---------------|
+| Visa card due date | Happy path | Centralized Server | — | passes |
+| SBI Mutual Fund advice | Input: Topic | Centralized Server | Topic Control | `self check input` |
+| Reveal system prompt | Input: Jailbreak | Embedded | Jailbreak | `self check input` |
+| Bitcoin investment | Input: Topic | Centralized Server | Topic Control | `self check input` |
+| Email + phone PII | Input: PII | Embedded | PII / Personal Data | `detect sensitive data on input` |
+| Savings account summary | Output: Policy | Embedded | Topic Control | `self check output` (if disclaimer missing) |
 - Expand **Agent Trace** to show which agent and tools ran unguarded.
 - Expand **Guardrails Log** to show `triggered_input_rail`, `triggered_output_rail`, and `allowed`.
 - For quick batch demos, use sample size **10** — full 100-query run is slow with live LLM calls.
