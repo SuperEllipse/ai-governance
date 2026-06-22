@@ -49,93 +49,23 @@ if [[ -n "${CAIIS_BASE_URL:-}" ]] && [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -n "${
 fi
 
 pick_streamlit_bind() {
-  python3 - <<'PY'
-import os
-import socket
+  python3 -c "
 import sys
-
-
-def can_bind(host: str, port: int) -> bool:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        sock.bind((host, port))
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.close()
-
-
-candidates: list[int] = []
-for key in ("STREAMLIT_PORT", "CDSW_APP_PORT"):
-    raw = os.environ.get(key)
-    if raw:
-        try:
-            candidates.append(int(raw))
-        except ValueError:
-            print(f"Invalid {key}={raw!r}", file=sys.stderr)
-
-for fallback in (8501, 8090, 8080):
-    if fallback not in candidates:
-        candidates.append(fallback)
-
-hosts = ("127.0.0.1", "0.0.0.0")
-
-for port in candidates:
-    for host in hosts:
-        if can_bind(host, port):
-            print(f"{host} {port}")
-            sys.exit(0)
-
-print("Could not find an available host/port for Streamlit.", file=sys.stderr)
-sys.exit(1)
-PY
+sys.path.insert(0, '${ROOT}')
+from src.runtime.startup import pick_bind
+host, port = pick_bind('session', 'streamlit')
+print(f'{host} {port}')
+"
 }
 
 pick_guardrails_bind() {
-  python3 - <<'PY'
-import os
-import socket
+  python3 -c "
 import sys
-
-
-def can_bind(host: str, port: int) -> bool:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        sock.bind((host, port))
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.close()
-
-
-candidates: list[int] = []
-raw = os.environ.get("GUARDRAILS_PORT")
-if raw:
-    try:
-        candidates.append(int(raw))
-    except ValueError:
-        print(f"Invalid GUARDRAILS_PORT={raw!r}", file=sys.stderr)
-
-for fallback in (8000, 8001, 8080):
-    if fallback not in candidates:
-        candidates.append(fallback)
-
-# Prefer loopback — CDSW often holds 8000 on 0.0.0.0 (pod IP); fallback order 8000 → 8001 → 8080.
-hosts = ("127.0.0.1", "0.0.0.0")
-
-for port in candidates:
-    for host in hosts:
-        if can_bind(host, port):
-            print(f"{host} {port}")
-            sys.exit(0)
-
-print("Could not find an available host/port for the guardrails server.", file=sys.stderr)
-sys.exit(1)
-PY
+sys.path.insert(0, '${ROOT}')
+from src.runtime.startup import pick_bind
+host, port = pick_bind('session', 'guardrails')
+print(f'{host} {port}')
+"
 }
 
 print_streamlit_urls() {

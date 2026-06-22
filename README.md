@@ -88,17 +88,21 @@ ai-governance/
 │   ├── base/                 # Shared prompts and base config
 │   └── policies/             # Modular policy configs
 ├── src/
+│   ├── runtime/startup.py    # Shared env, bind, and startup helpers
 │   ├── llm/provider.py       # OpenAI / CAIIS switching
 │   ├── agents/               # CrewAI agents, tools, routing
 │   ├── guardrails/           # Client, config composer, violations
 │   └── simulation/           # 100-query dataset + batch runner
 ├── app/streamlit_app.py
+├── applications/
+│   ├── guardrails_server_app.py   # CAI Application: NeMo Guardrails server
+│   └── streamlit_demo_app.py      # CAI Application: Streamlit UI
 └── scripts/
     ├── common_env.sh         # Shared env loading (.env, CDP token)
-    ├── start_guardrails_server.sh
-    ├── run_guardrails_uvicorn.py  # loopback-friendly server launcher
-    ├── start_demo.sh
-    └── test_caiis_connection.py  # CAIIS connectivity check (CDSW job)
+    ├── start_guardrails_server.sh   # Session wrapper → guardrails_server_app.py
+    ├── run_guardrails_uvicorn.py    # uvicorn launcher (used by application entry)
+    ├── start_demo.sh                # Session wrapper → streamlit_demo_app.py
+    └── test_caiis_connection.py     # CAIIS connectivity check (CDSW job)
 ```
 
 ## Environment Variables
@@ -116,7 +120,60 @@ ai-governance/
 | `GUARDRAILS_SERVER_URL` | Centralized server URL (default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
 | `GUARDRAILS_PORT` | Preferred bind port for `start_guardrails_server.sh` (example: `8001` on CDSW; script may pick 8000→8001→8080) |
 | `STREAMLIT_PORT` | UI port override (checked before auto-detect) |
-| `CDSW_APP_PORT` | CDSW application port (default in sessions: `8090`) |
+| `CDSW_APP_PORT` | CDSW application port (auto-used in CAI Application mode; default in sessions: `8090`) |
+
+## Cloudera AI Applications
+
+Deploy this demo as **two separate long-running Applications** in Cloudera AI (per [CAI Applications docs](https://docs.cloudera.com/machine-learning/cloud/applications/topics/ml-applications-c.html)). Each application runs a Python entry script that binds to **`CDSW_APP_PORT`** (or **`CDSW_READONLY_PORT`**) on `0.0.0.0` when launched as an Application.
+
+### Application 1 — NeMo Guardrails server
+
+| Field | Value |
+|-------|-------|
+| **Script** | `applications/guardrails_server_app.py` |
+| **Subdomain** (example) | `nemo-guardrails` |
+| **Public URL** (example) | `https://nemo-guardrails.YOUR-CAI-DOMAIN` |
+
+**Environment variables** (set in the Application UI or project `.env`):
+
+- `CAIIS_BASE_URL`, `CAIIS_MODEL`, `CDP_TOKEN` — when using Cloudera AI Inference
+- `OPENAI_API_KEY`, `OPENAI_MODEL` — when using OpenAI
+- `GUARDRAILS_CONFIG` — optional; defaults to `guardrails/`
+
+`CDSW_APP_PORT` is injected by the platform; the script binds automatically.
+
+### Application 2 — Streamlit banking demo
+
+| Field | Value |
+|-------|-------|
+| **Script** | `applications/streamlit_demo_app.py` |
+| **Subdomain** (example) | `banking-demo` |
+| **Public URL** (example) | `https://banking-demo.YOUR-CAI-DOMAIN` |
+
+**Environment variables:**
+
+- Same LLM provider vars as above (`OPENAI_*` or `CAIIS_*` + `CDP_TOKEN`)
+- **`GUARDRAILS_SERVER_URL`** — set to the **public HTTPS URL** of Application 1 (e.g. `https://nemo-guardrails.YOUR-CAI-DOMAIN`), not `http://127.0.0.1:8001`
+
+Start Application 1 first, copy its public URL into `GUARDRAILS_SERVER_URL` on Application 2, then start Application 2.
+
+### Registering in the Cloudera AI UI
+
+1. Open your project → **Applications** → **New Application**.
+2. **Application 1:** name e.g. `nemo-guardrails`, subdomain `nemo-guardrails`, script path `applications/guardrails_server_app.py`, add env vars, create and start.
+3. **Application 2:** name e.g. `banking-demo`, subdomain `banking-demo`, script path `applications/streamlit_demo_app.py`, set `GUARDRAILS_SERVER_URL=https://nemo-guardrails.YOUR-CAI-DOMAIN`, create and start.
+4. Open the Streamlit app via its public URL; use **Centralized Server** mode in the sidebar (default).
+
+### Session / CLI use (unchanged)
+
+Interactive workbench sessions still use the bash wrappers:
+
+```bash
+bash scripts/start_guardrails_server.sh   # → applications/guardrails_server_app.py --mode session
+bash scripts/start_demo.sh                # → applications/streamlit_demo_app.py --mode session
+```
+
+Session mode picks loopback addresses and free ports (`127.0.0.1:8000` / `8001` for guardrails, `127.0.0.1:8090` for Streamlit).
 
 ## Demo Scenarios
 

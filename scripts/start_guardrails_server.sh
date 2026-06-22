@@ -1,63 +1,9 @@
 #!/usr/bin/env bash
-# Start NeMo Guardrails centralized server (auto-bind 127.0.0.1; port 8000 or 8001 on CDSW)
+# Start NeMo Guardrails centralized server (session/CLI wrapper).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${ROOT}"
 
-# shellcheck source=scripts/common_env.sh
-source "${SCRIPT_DIR}/common_env.sh"
-export_pythonpath
-
-export MAIN_MODEL_ENGINE="${MAIN_MODEL_ENGINE:-openai}"
-
-# Default to OpenAI; switch to CAIIS by setting CAIIS_BASE_URL / CAIIS_MODEL in .env
-if [[ -n "${CAIIS_BASE_URL:-}" ]]; then
-  export MAIN_MODEL_NAME="${MAIN_MODEL_NAME:-${CAIIS_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1}}"
-  export MAIN_MODEL_BASE_URL="${MAIN_MODEL_BASE_URL:-${CAIIS_BASE_URL}}"
-else
-  export MAIN_MODEL_NAME="${MAIN_MODEL_NAME:-${OPENAI_MODEL:-gpt-4o-mini}}"
-  export MAIN_MODEL_BASE_URL="${MAIN_MODEL_BASE_URL:-${OPENAI_BASE_URL:-https://api.openai.com/v1}}"
-fi
-
-# API key: OpenAI key first, then CDP token for CAIIS
-if [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -n "${CDP_TOKEN:-}" ]]; then
-  export OPENAI_API_KEY="${CDP_TOKEN}"
-elif [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -f /tmp/jwt ]]; then
-  export OPENAI_API_KEY="$(tr -d '[:space:]' < /tmp/jwt)"
-fi
-export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
-
-# NeMo server expects rails_config_path = parent dir; each subdir with config.yml is a config id.
-export DEFAULT_CONFIG_ID="${DEFAULT_CONFIG_ID:-base}"
-export GUARDRAILS_CONFIG_ID="${GUARDRAILS_CONFIG_ID:-base}"
-CONFIG_PATH="${GUARDRAILS_CONFIG:-${ROOT}/guardrails}"
-CONFIG_PATH="$(cd "$(dirname "${CONFIG_PATH}")" && pwd)/$(basename "${CONFIG_PATH}")"
-
-read -r BIND_HOST PORT < <(pick_guardrails_bind)
-export GUARDRAILS_HOST="${BIND_HOST}"
-export GUARDRAILS_PORT="${PORT}"
-
-RAILS_CONFIG_PATH="$(python3 -c "
-import sys
-sys.path.insert(0, '${ROOT}')
-from src.guardrails.config_composer import get_rails_config_parent
-print(get_rails_config_parent('${CONFIG_PATH}'))
-")"
-
-echo "Starting NeMo Guardrails server..."
-echo "  Config source: ${CONFIG_PATH}"
-echo "  rails_config_path: ${RAILS_CONFIG_PATH}"
-echo "  default config_id: ${DEFAULT_CONFIG_ID}"
-echo "  Bind:   ${BIND_HOST}:${PORT}"
-echo "  Model:  $MAIN_MODEL_NAME"
-echo "  Base:   $MAIN_MODEL_BASE_URL"
-echo "  PYTHONPATH=${PYTHONPATH}"
-print_guardrails_urls "${BIND_HOST}" "${PORT}"
-
-exec python3 "${SCRIPT_DIR}/run_guardrails_uvicorn.py" \
-  --config "$CONFIG_PATH" \
-  --host "${BIND_HOST}" \
-  --port "${PORT}" \
-  --default-config-id "base"
+exec python3 "${ROOT}/applications/guardrails_server_app.py" --mode session
