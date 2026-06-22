@@ -10,3 +10,5 @@ python-dotenv
 presidio-analyzer
 presidio-anonymizer
 spacy
+# Optional: newer SQLite for ChromaDB/CrewAI when system sqlite3 is too old
+pysqlite3-binary

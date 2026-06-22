@@ -557,6 +557,10 @@ CrewAI uses an OpenAI-compatible HTTP client for **both** OpenAI and CAIIS, so c
 
 Force CAIIS as sidebar default: `DEFAULT_LLM_PROVIDER=caiis` in `.env`.
 
+### `RuntimeError` / sqlite3 version check when starting guardrails or Streamlit
+
+ChromaDB (pulled in by CrewAI) requires SQLite ≥ 3.35. If the system `sqlite3` module is older, install `pysqlite3-binary` (`pip install pysqlite3-binary`) — the Streamlit and guardrails entry points patch `sys.modules["sqlite3"]` automatically when that package is present.
+
 ### `CDP_TOKEN` not set for CAIIS
 
 Ensure `/home/cdsw/.env` (or `${ROOT}/.env`) contains `CDP_TOKEN=...`, or rely on CDSW's `/tmp/jwt`. `scripts/common_env.sh` loads `.env` with `set -a` so variables export to child processes.

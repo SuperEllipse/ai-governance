@@ -6,11 +6,12 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from src.llm.provider import LLMConfig, SafetyModelConfig
+if TYPE_CHECKING:
+    from src.llm.provider import LLMConfig, SafetyModelConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GUARDRAILS_ROOT = PROJECT_ROOT / "guardrails"
@@ -92,6 +93,8 @@ def compose_config(
     safety_config: SafetyModelConfig | None = None,
 ) -> Path:
     """Build a temporary guardrails config directory and return its path."""
+    from src.llm.provider import SafetyModelConfig
+
     safety = safety_config or SafetyModelConfig()
     merged: dict[str, Any] = _load_yaml(BASE_DIR / "config.yml")
 
