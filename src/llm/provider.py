@@ -71,21 +71,15 @@ def is_caiis_configured() -> bool:
 
 
 def detect_default_provider() -> ProviderName:
-    """Pick the default sidebar provider from env (CAIIS when configured)."""
+    """Pick the default sidebar provider (OpenAI unless DEFAULT_LLM_PROVIDER is set)."""
     override = os.getenv("DEFAULT_LLM_PROVIDER", "").strip().lower()
     if override in ("openai", "caiis"):
         return override  # type: ignore[return-value]
-    if is_caiis_configured():
-        return "caiis"
-    if os.getenv("OPENAI_API_KEY", "").strip():
-        return "openai"
-    if _read_cdp_token():
-        return "caiis"
     return "openai"
 
 
 def default_llm_config() -> LLMConfig:
-    """Default LLM config based on env (CAIIS when CAIIS_BASE_URL is set)."""
+    """Default LLM config — OpenAI unless DEFAULT_LLM_PROVIDER=caiis."""
     if detect_default_provider() == "caiis":
         return default_caiis_config()
     return default_openai_config()

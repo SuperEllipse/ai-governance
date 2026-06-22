@@ -77,6 +77,7 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
         provider_options,
         index=provider_options.index(default_provider),
         format_func=lambda x: "OpenAI" if x == "openai" else "Cloudera AI Inference",
+        help="Defaults to OpenAI. Set DEFAULT_LLM_PROVIDER=caiis in .env to default to CAIIS.",
     )
 
     if provider == "openai" and is_caiis_configured():

@@ -37,7 +37,7 @@ fi
 export OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}"
 export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
 
-# CAIIS: auto-select in Streamlit when CAIIS_BASE_URL is set (see detect_default_provider)
+# CAIIS: sidebar defaults to OpenAI unless DEFAULT_LLM_PROVIDER=caiis (see detect_default_provider)
 # CDP token: env var or CDSW session file (for CAIIS auth)
 if [[ -z "${CDP_TOKEN:-}" ]] && [[ -f /tmp/jwt ]]; then
   export CDP_TOKEN="$(tr -d '[:space:]' < /tmp/jwt)"

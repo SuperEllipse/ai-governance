@@ -34,7 +34,15 @@ def test_detect_default_provider() -> None:
     }
     with patch.dict(os.environ, env, clear=True):
         _assert(is_caiis_configured(), "CAIIS should be configured with real base URL")
-        _assert(detect_default_provider() == "caiis", "default provider should be caiis")
+        _assert(
+            detect_default_provider() == "openai",
+            "default provider should be openai unless DEFAULT_LLM_PROVIDER is set",
+        )
+    with patch.dict(os.environ, {**env, "DEFAULT_LLM_PROVIDER": "caiis"}, clear=True):
+        _assert(
+            detect_default_provider() == "caiis",
+            "DEFAULT_LLM_PROVIDER=caiis should select caiis",
+        )
 
 
 def test_get_llm_config_caiis() -> None:
@@ -80,15 +88,23 @@ def test_create_crewai_llm_routes_openai_client() -> None:
     )
 
 
-def test_default_llm_config_prefers_caiis() -> None:
+def test_default_llm_config_prefers_openai() -> None:
     env = {
         "CAIIS_BASE_URL": "https://caiis.example.com/v1",
-        "OPENAI_API_KEY": "sk-openai-should-not-win",
+        "OPENAI_API_KEY": "sk-openai-key",
         "CDP_TOKEN": "test-cdp-token",
     }
     with patch.dict(os.environ, env, clear=True):
         cfg = default_llm_config()
-        _assert(cfg.provider == "caiis", "default_llm_config should pick caiis when URL set")
+        _assert(cfg.provider == "openai", "default_llm_config should default to openai")
+        _assert(cfg.model == "gpt-4o-mini", "default should use gpt-4o-mini")
+
+    with patch.dict(os.environ, {**env, "DEFAULT_LLM_PROVIDER": "caiis"}, clear=True):
+        cfg = default_llm_config()
+        _assert(
+            cfg.provider == "caiis",
+            "default_llm_config should pick caiis when DEFAULT_LLM_PROVIDER=caiis",
+        )
         _assert(cfg.base_url == env["CAIIS_BASE_URL"], "default should use CAIIS base URL")
 
 
@@ -125,7 +141,7 @@ def main() -> int:
         test_detect_default_provider,
         test_get_llm_config_caiis,
         test_create_crewai_llm_routes_openai_client,
-        test_default_llm_config_prefers_caiis,
+        test_default_llm_config_prefers_openai,
         test_guardrails_server_config_patch,
     ]
     for test in tests:
