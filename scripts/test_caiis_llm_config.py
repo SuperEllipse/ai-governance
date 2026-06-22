@@ -120,7 +120,9 @@ def test_guardrails_server_config_patch() -> None:
         runtime = prepare_server_config_from_env(ROOT / "guardrails" / "base")
         import yaml
 
-        with (runtime / "config.yml").open() as f:
+        config_path = runtime / "base" / "config.yml"
+        _assert(config_path.exists(), "patched config should live at <root>/base/config.yml")
+        with config_path.open() as f:
             config = yaml.safe_load(f)
         for model in config["models"]:
             if model.get("engine") != "openai":

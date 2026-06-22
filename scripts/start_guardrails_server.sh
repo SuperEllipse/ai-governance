@@ -29,7 +29,11 @@ elif [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -f /tmp/jwt ]]; then
 fi
 export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 
-CONFIG_PATH="${GUARDRAILS_CONFIG:-./guardrails/base}"
+# NeMo server expects rails_config_path = parent dir; each subdir with config.yml is a config id.
+export DEFAULT_CONFIG_ID="${DEFAULT_CONFIG_ID:-base}"
+export GUARDRAILS_CONFIG_ID="${GUARDRAILS_CONFIG_ID:-base}"
+CONFIG_PATH="${GUARDRAILS_CONFIG:-${ROOT}/guardrails}"
+CONFIG_PATH="$(cd "$(dirname "${CONFIG_PATH}")" && pwd)/$(basename "${CONFIG_PATH}")"
 
 read -r BIND_HOST PORT < <(pick_guardrails_bind)
 export GUARDRAILS_HOST="${BIND_HOST}"

@@ -142,6 +142,28 @@ def get_server_config_path() -> Path:
     return GUARDRAILS_ROOT
 
 
+def resolve_rails_layout(source_dir: Path | str) -> tuple[Path, Path, str]:
+    """Return (rails_root, config_subdir, config_id) for the NeMo server API.
+
+    NeMo expects ``rails_config_path`` to be a parent directory whose immediate
+    child folders (each containing ``config.yml``) are config ids — e.g.
+    ``guardrails/base/`` → root ``guardrails/``, id ``base``.
+    """
+    src = Path(source_dir).resolve()
+    default_id = os.environ.get("GUARDRAILS_CONFIG_ID", "base")
+
+    if (src / "config.yml").exists() or (src / "config.yaml").exists():
+        if src.name == default_id and src.parent != src:
+            return src.parent, src, default_id
+        return src, src, src.name
+
+    base_dir = src / default_id
+    if (base_dir / "config.yml").exists() or (base_dir / "config.yaml").exists():
+        return src, base_dir, default_id
+
+    return src, src, default_id
+
+
 def set_server_env(llm_config: LLMConfig) -> dict[str, str]:
     """Environment variables for nemoguardrails server subprocess."""
     env = os.environ.copy()
@@ -153,24 +175,7 @@ def set_server_env(llm_config: LLMConfig) -> dict[str, str]:
     return env
 
 
-def prepare_server_config_from_env(source_dir: Path | str) -> Path:
-    """Copy guardrails config and apply MAIN_MODEL_* / OPENAI env overrides.
-
-    NeMo server only patches the main model from env; safety_check rails still
-    read config.yml. This ensures both main and safety_check models use CAIIS.
-    """
-    src = Path(source_dir)
-    base_url = os.environ.get("MAIN_MODEL_BASE_URL", "").strip()
-    model_name = os.environ.get("MAIN_MODEL_NAME", "").strip()
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-
-    if not base_url and not model_name and not api_key:
-        return src
-
-    tmp_dir = Path(tempfile.mkdtemp(prefix="nemo_guardrails_server_"))
-    shutil.copytree(src, tmp_dir, dirs_exist_ok=True)
-
-    config_path = tmp_dir / "config.yml"
+def _patch_openai_models(config_path: Path, base_url: str, model_name: str, api_key: str) -> None:
     merged = _load_yaml(config_path)
     models = merged.get("models") or []
     for model in models:
@@ -187,4 +192,32 @@ def prepare_server_config_from_env(source_dir: Path | str) -> Path:
     with config_path.open("w") as f:
         yaml.dump(merged, f, default_flow_style=False)
 
-    return tmp_dir
+
+def prepare_server_config_from_env(source_dir: Path | str) -> Path:
+    """Return NeMo ``rails_config_path`` with optional MAIN_MODEL_* env overrides.
+
+    NeMo server only patches the main model from env; safety_check rails still
+    read config.yml. This ensures both main and safety_check models use CAIIS.
+
+    Always returns a directory layout where ``<root>/<config_id>/config.yml``
+    exists (never a bare single-config temp dir with an unstable id).
+    """
+    rails_root, config_subdir, _config_id = resolve_rails_layout(source_dir)
+    base_url = os.environ.get("MAIN_MODEL_BASE_URL", "").strip()
+    model_name = os.environ.get("MAIN_MODEL_NAME", "").strip()
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+
+    if not base_url and not model_name and not api_key:
+        return rails_root
+
+    tmp_root = Path(tempfile.mkdtemp(prefix="nemo_guardrails_server_"))
+    if config_subdir == rails_root:
+        dest_subdir = tmp_root / _config_id
+        shutil.copytree(config_subdir, dest_subdir, dirs_exist_ok=True)
+        config_path = dest_subdir / "config.yml"
+    else:
+        shutil.copytree(rails_root, tmp_root, dirs_exist_ok=True)
+        config_path = tmp_root / config_subdir.relative_to(rails_root) / "config.yml"
+
+    _patch_openai_models(config_path, base_url, model_name, api_key)
+    return tmp_root

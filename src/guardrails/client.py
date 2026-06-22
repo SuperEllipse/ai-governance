@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 GuardrailsMode = Literal["unguarded", "embedded", "server"]
 
-# Must match basename of GUARDRAILS_CONFIG (default ./guardrails/base) and --default-config-id.
-DEFAULT_GUARDRAILS_CONFIG_ID = os.environ.get("GUARDRAILS_CONFIG_ID", "base")
+# Must match the ``base/`` subfolder under GUARDRAILS_CONFIG and server DEFAULT_CONFIG_ID.
+DEFAULT_GUARDRAILS_CONFIG_ID = "base"
 
 GUARDRAILS_OPTIONS = {
     "output_vars": [
