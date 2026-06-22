@@ -66,10 +66,24 @@ def init_session_state() -> None:
         "batch_summary": None,
         "selected_violation": None,
         "demo_suggestion": None,
+        "pending_demo": None,
     }
     for key, val in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = val
+
+
+def apply_pending_demo() -> None:
+    """Apply example-button config before sidebar widgets are instantiated."""
+    pending = st.session_state.pop("pending_demo", None)
+    if not pending:
+        return
+    st.session_state["query_input"] = pending["query"]
+    st.session_state["execution_mode"] = pending["mode"]
+    st.session_state["demo_suggestion"] = pending["demo_suggestion"]
+    suggested = set(pending["policies"])
+    for _label, policy_key in POLICY_OPTIONS.items():
+        st.session_state[f"policy_{policy_key}"] = policy_key in suggested
 
 
 def _block_type_badge(block_type: str) -> str:
@@ -129,12 +143,13 @@ def render_demo_guide() -> None:
 
 
 def apply_example_suggestion(example: ExampleQuery) -> None:
-    st.session_state["query_input"] = example["query"]
-    st.session_state["demo_suggestion"] = example
-    st.session_state["execution_mode"] = _format_mode_label(example["recommended_mode"])
-    suggested = set(example["recommended_policies"])
-    for _label, policy_key in POLICY_OPTIONS.items():
-        st.session_state[f"policy_{policy_key}"] = policy_key in suggested
+    st.session_state["pending_demo"] = {
+        "query": example["query"],
+        "mode": _format_mode_label(example["recommended_mode"]),
+        "policies": list(example["recommended_policies"]),
+        "demo_suggestion": example,
+    }
+    st.rerun()
 
 
 def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, list[str], str]:
@@ -550,6 +565,7 @@ def render_architecture_tab(server_url: str) -> None:
 
 def main() -> None:
     init_session_state()
+    apply_pending_demo()
     st.title("🏦 NeMo Guardrails Banking Demo")
     st.caption("CrewAI multi-agent banking assistant with modular safety policies")
 
