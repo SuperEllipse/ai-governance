@@ -9,16 +9,39 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+
+def _bootstrap_import_path() -> None:
+    try:
+        root = Path(__file__).resolve().parents[1]
+    except NameError:
+        root = None
+        for candidate in (Path.cwd(), Path("/home/cdsw")):
+            if (candidate / "guardrails").is_dir() and (candidate / "applications").is_dir():
+                root = candidate.resolve()
+                break
+        if root is None:
+            root = Path.cwd()
+    root_str = str(root)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+
+_bootstrap_import_path()
 
 from src.runtime.startup import (  # noqa: E402
     load_dotenv_files,
     pick_bind,
     print_startup_banner,
+    resolve_project_root,
     setup_pythonpath,
 )
+
+
+def _script_anchor() -> str | None:
+    try:
+        return __file__
+    except NameError:
+        return None
 
 
 def _detect_mode(cli_mode: str | None) -> str:
@@ -39,7 +62,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    project_root = setup_pythonpath(ROOT)
+    project_root = setup_pythonpath(resolve_project_root(_script_anchor()))
     load_dotenv_files(project_root)
 
     mode = _detect_mode(args.mode)

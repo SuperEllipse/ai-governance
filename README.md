@@ -128,6 +128,8 @@ Deploy this demo as **two separate long-running Applications** in Cloudera AI (p
 
 ### Application 1 — NeMo Guardrails server
 
+> **Script path:** In the CAI Application UI, set the entry script to **`applications/guardrails_server_app.py`** (relative to the project root). CAI may run scripts in an IPython/Jupyter context where `__file__` is undefined; the application entry points resolve the project root via `src/runtime/startup.py` fallbacks (`cwd`, `/home/cdsw`, CDSW env hints).
+
 | Field | Value |
 |-------|-------|
 | **Script** | `applications/guardrails_server_app.py` |

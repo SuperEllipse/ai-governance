@@ -12,8 +12,48 @@ Mode = Literal["session", "application"]
 Service = Literal["streamlit", "guardrails"]
 
 
+def _looks_like_project_root(path: Path) -> bool:
+    return (path / "guardrails").is_dir() and (path / "applications").is_dir()
+
+
+def resolve_project_root(anchor: str | None = None) -> Path:
+    """Resolve project root with fallbacks for IPython/Jupyter where ``__file__`` is undefined."""
+    if anchor:
+        anchor_path = Path(anchor).resolve()
+        candidate = anchor_path.parents[1]
+        if _looks_like_project_root(candidate):
+            return candidate
+        for parent in anchor_path.parents:
+            if _looks_like_project_root(parent):
+                return parent
+
+    cwd = Path.cwd()
+    if _looks_like_project_root(cwd):
+        return cwd.resolve()
+
+    cdsw_home = Path("/home/cdsw")
+    if _looks_like_project_root(cdsw_home):
+        return cdsw_home.resolve()
+
+    for env_key in ("CDSW_PROJECT_DIR", "PROJECT_ROOT", "PWD", "HOME"):
+        raw = os.environ.get(env_key)
+        if not raw:
+            continue
+        candidate = Path(raw).expanduser()
+        if _looks_like_project_root(candidate):
+            return candidate.resolve()
+
+    if anchor:
+        return Path(anchor).resolve().parents[1]
+
+    return cwd.resolve()
+
+
 def _project_root_from_here() -> Path:
-    return Path(__file__).resolve().parents[2]
+    try:
+        return resolve_project_root(__file__)
+    except NameError:
+        return resolve_project_root()
 
 
 def load_dotenv_files(project_root: Path | None = None) -> None:
