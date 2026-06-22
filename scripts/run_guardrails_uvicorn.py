@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,13 +37,27 @@ def main() -> int:
 
     set_deployment_type(DeploymentTypeEnum.API.value)
 
-    config_path = os.path.expanduser(args.config.rstrip(os.path.sep))
+    source_config_path = os.path.expanduser(args.config.rstrip(os.path.sep))
     from src.guardrails.config_composer import prepare_server_config_from_env
 
-    config_path = str(prepare_server_config_from_env(config_path))
+    config_path = str(prepare_server_config_from_env(source_config_path))
+    config_id = args.default_config_id or os.path.basename(os.path.normpath(source_config_path))
 
-    if args.default_config_id:
-        api.set_default_config_id(args.default_config_id)
+    api.app.rails_config_path = config_path
+    api.set_default_config_id(config_id)
+
+    # Env overrides copy config into a temp dir; keep a stable API config id (e.g. "base").
+    from nemoguardrails.server.api import lifespan as nemo_lifespan
+
+    @asynccontextmanager
+    async def lifespan_with_stable_config_id(app):
+        async with nemo_lifespan(app):
+            if app.single_config_mode:
+                app.single_config_id = config_id
+                api.set_default_config_id(config_id)
+            yield
+
+    api.app.router.lifespan_context = lifespan_with_stable_config_id
 
     server_app: FastAPI = api.app
 

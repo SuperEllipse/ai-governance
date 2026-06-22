@@ -47,4 +47,4 @@ exec python3 "${SCRIPT_DIR}/run_guardrails_uvicorn.py" \
   --config "$CONFIG_PATH" \
   --host "${BIND_HOST}" \
   --port "${PORT}" \
-  --default-config-id "banking_demo"
+  --default-config-id "base"

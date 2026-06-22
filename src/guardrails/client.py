@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -17,6 +18,9 @@ from src.llm.provider import LLMConfig, SafetyModelConfig, default_llm_config
 logger = logging.getLogger(__name__)
 
 GuardrailsMode = Literal["unguarded", "embedded", "server"]
+
+# Must match basename of GUARDRAILS_CONFIG (default ./guardrails/base) and --default-config-id.
+DEFAULT_GUARDRAILS_CONFIG_ID = os.environ.get("GUARDRAILS_CONFIG_ID", "base")
 
 GUARDRAILS_OPTIONS = {
     "output_vars": [
@@ -431,7 +435,10 @@ class GuardrailsClient:
         payload = {
             "model": self.llm_config.model,
             "messages": [{"role": "user", "content": enriched_query}],
-            "guardrails": {"options": GUARDRAILS_OPTIONS},
+            "guardrails": {
+                "config_id": DEFAULT_GUARDRAILS_CONFIG_ID,
+                "options": GUARDRAILS_OPTIONS,
+            },
         }
 
         try:
