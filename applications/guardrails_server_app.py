@@ -72,7 +72,7 @@ def _parse_args() -> argparse.Namespace:
         "--mode",
         choices=("session", "application"),
         default=None,
-        help="Bind strategy: application uses CDSW_APP_PORT on 0.0.0.0; session auto-picks loopback.",
+        help="Bind strategy: application uses CDSW_APP_PORT on loopback (127.0.0.1) with CDSW proxy.",
     )
     parser.add_argument(
         "--config",
@@ -141,8 +141,16 @@ def _run() -> None:
         return
     _main_started = True
     exit_code = main()
-    if not _running_under_ipykernel():
-        raise SystemExit(exit_code)
+    if _running_under_ipykernel():
+        if exit_code != 0:
+            print(
+                f"ERROR: Guardrails server failed to start (exit code {exit_code}). "
+                "Check bind host/port and logs above.",
+                file=sys.stderr,
+            )
+            raise RuntimeError(f"Guardrails server failed to start (exit code {exit_code})")
+        return
+    raise SystemExit(exit_code)
 
 
 if _should_autostart():

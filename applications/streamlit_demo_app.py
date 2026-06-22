@@ -71,7 +71,7 @@ def _parse_args() -> argparse.Namespace:
         "--mode",
         choices=("session", "application"),
         default=None,
-        help="Bind strategy: application uses CDSW_APP_PORT on 0.0.0.0; session auto-picks loopback.",
+        help="Bind strategy: application uses CDSW_APP_PORT on loopback (127.0.0.1) with CDSW proxy.",
     )
     args, _unknown = parser.parse_known_args()
     return args

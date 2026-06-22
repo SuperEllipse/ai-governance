@@ -178,10 +178,23 @@ def _application_bind_port() -> int:
     )
 
 
+def _pick_application_bind(service: Service) -> tuple[str, int]:
+    """Bind CDSW application port on loopback first; CDSW holds 0.0.0.0 on the pod."""
+    port = _application_bind_port()
+    label = "Streamlit" if service == "streamlit" else "guardrails server"
+    for host in ("127.0.0.1", "0.0.0.0"):
+        if _can_bind(host, port):
+            return host, port
+    raise RuntimeError(
+        f"Could not bind {label} to port {port} on 127.0.0.1 or 0.0.0.0 "
+        f"(CDSW platform may already hold 0.0.0.0:{port})."
+    )
+
+
 def pick_bind(mode: Mode, service: Service) -> tuple[str, int]:
     """Return ``(host, port)`` for Streamlit or the guardrails server."""
     if mode == "application":
-        return "0.0.0.0", _application_bind_port()
+        return _pick_application_bind(service)
 
     if service == "streamlit":
         candidates: list[int] = []
@@ -237,6 +250,20 @@ def _application_port_env_line(port: int) -> str:
     return f"Using port {port} {suffix}"
 
 
+def _cdsw_loopback_proxy_line(bind_host: str, port: int) -> str | None:
+    """Note when loopback bind relies on the CDSW application proxy."""
+    if bind_host != "127.0.0.1":
+        return None
+    for key in ("CDSW_APP_PORT", "CDSW_READONLY_PORT"):
+        raw = os.environ.get(key)
+        if raw and str(port) == raw.strip():
+            return (
+                f"  CDSW proxy: bound to 127.0.0.1:{port}; "
+                f"public Application traffic ({key}) is forwarded to this loopback port."
+            )
+    return None
+
+
 def print_startup_banner(
     service: Service,
     *,
@@ -258,6 +285,9 @@ def print_startup_banner(
         print("")
         if mode == "application":
             print(f"  {_application_port_env_line(port)}")
+            proxy_line = _cdsw_loopback_proxy_line(bind_host, port)
+            if proxy_line:
+                print(proxy_line)
             print("  GUARDRAILS_PORT only applies to session/bash mode (start_guardrails_server.sh).")
             print("  Cloudera AI Application: use the public HTTPS URL for this app.")
             print(
@@ -290,6 +320,9 @@ def print_startup_banner(
 
     if mode == "application":
         print(f"  {_application_port_env_line(port)}")
+        proxy_line = _cdsw_loopback_proxy_line(bind_host, port)
+        if proxy_line:
+            print(proxy_line)
         print("  GUARDRAILS_PORT only applies to session/bash mode.")
         print("  Cloudera AI Application: open the public HTTPS URL for this app.")
         print(
