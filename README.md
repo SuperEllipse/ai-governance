@@ -118,13 +118,15 @@ ai-governance/
 | `DEFAULT_LLM_PROVIDER` | Optional sidebar default: `openai` (default) or `caiis` |
 | `NVIDIA_API_KEY` | For NIM safety models (optional; default is `self_check`) |
 | `GUARDRAILS_SERVER_URL` | Centralized server URL (default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
-| `GUARDRAILS_PORT` | Preferred bind port for `start_guardrails_server.sh` (example: `8001` on CDSW; script may pick 8000→8001→8080) |
+| `GUARDRAILS_PORT` | **Session/bash only:** preferred bind port for `start_guardrails_server.sh` (example: `8001`; script may pick 8000→8001→8080). **Ignored in CAI Application mode.** |
 | `STREAMLIT_PORT` | UI port override (checked before auto-detect) |
-| `CDSW_APP_PORT` | CDSW application port (auto-used in CAI Application mode; default in sessions: `8090`) |
+| `CDSW_APP_PORT` | **CAI Application mode:** platform-injected bind port (e.g. `8100`); required on `0.0.0.0`. Also used in sessions when set. |
 
 ## Cloudera AI Applications
 
 Deploy this demo as **two separate long-running Applications** in Cloudera AI (per [CAI Applications docs](https://docs.cloudera.com/machine-learning/cloud/applications/topics/ml-applications-c.html)). Each application runs a Python entry script that binds to **`CDSW_APP_PORT`** (or **`CDSW_READONLY_PORT`**) on `0.0.0.0` when launched as an Application.
+
+> **Port behavior:** Cloudera AI injects `CDSW_APP_PORT` (commonly `8100`). Application entry scripts **always** bind to that port — setting `GUARDRAILS_PORT=8001` in the Application UI does **not** change the bind port. `GUARDRAILS_PORT` is only used in session/bash mode (`start_guardrails_server.sh`). Cross-app communication uses each application's **public HTTPS URL**, not `localhost` or loopback ports.
 
 ### Application 1 — NeMo Guardrails server
 
@@ -142,7 +144,7 @@ Deploy this demo as **two separate long-running Applications** in Cloudera AI (p
 - `OPENAI_API_KEY`, `OPENAI_MODEL` — when using OpenAI
 - `GUARDRAILS_CONFIG` — optional; defaults to `guardrails/`
 
-`CDSW_APP_PORT` is injected by the platform; the script binds automatically.
+`CDSW_APP_PORT` is injected by the platform (e.g. `8100`); the script binds automatically. Do **not** rely on `GUARDRAILS_PORT` here — it is ignored in application mode. After deploy, copy this app's **public HTTPS URL** for Application 2.
 
 ### Application 2 — Streamlit banking demo
 
@@ -155,7 +157,9 @@ Deploy this demo as **two separate long-running Applications** in Cloudera AI (p
 **Environment variables:**
 
 - Same LLM provider vars as above (`OPENAI_*` or `CAIIS_*` + `CDP_TOKEN`)
-- **`GUARDRAILS_SERVER_URL`** — set to the **public HTTPS URL** of Application 1 (e.g. `https://nemo-guardrails.YOUR-CAI-DOMAIN`), not `http://127.0.0.1:8001`
+- **`GUARDRAILS_SERVER_URL`** — set to the **public HTTPS URL** of Application 1 (e.g. `https://nemo-guardrails.YOUR-CAI-DOMAIN`), **not** `http://127.0.0.1:8001` or `localhost`. Loopback URLs only work inside a single session; each CAI Application runs in its own container.
+
+`CDSW_APP_PORT` is injected by the platform for Streamlit as well; `GUARDRAILS_PORT` does not affect this app.
 
 Start Application 1 first, copy its public URL into `GUARDRAILS_SERVER_URL` on Application 2, then start Application 2.
 

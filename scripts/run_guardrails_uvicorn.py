@@ -3,13 +3,30 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sys
+import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+
+def _has_running_asyncio_loop() -> bool:
+    """True when ipykernel/Jupyter already owns the main-thread event loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
+def _uvicorn_thread_target(server_app, host: str, port: int) -> None:
+    import uvicorn
+
+    uvicorn.run(server_app, host=host, port=port, log_level="info")
 
 
 def run_uvicorn_server(
@@ -70,6 +87,22 @@ def run_uvicorn_server(
     print(f"NeMo Guardrails rails_config_path={rails_config_path}", file=sys.stderr)
     print(f"NeMo Guardrails rails parent={rails_parent}", file=sys.stderr)
     print(f"NeMo Guardrails default config_id={config_id}", file=sys.stderr)
+
+    if _has_running_asyncio_loop():
+        print(
+            "Detected running asyncio event loop (ipykernel/Jupyter); "
+            "starting uvicorn in a background thread.",
+            file=sys.stderr,
+        )
+        thread = threading.Thread(
+            target=_uvicorn_thread_target,
+            args=(server_app, host, port),
+            name="guardrails-uvicorn",
+            daemon=False,
+        )
+        thread.start()
+        thread.join()
+        return 0
 
     uvicorn.run(server_app, host=host, port=port, log_level="info")
     return 0

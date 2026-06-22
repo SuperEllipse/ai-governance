@@ -224,6 +224,19 @@ def get_guardrails_config_path(project_root: Path | None = None) -> Path:
     return path
 
 
+def _application_port_env_line(port: int) -> str:
+    """Explain which platform env var selected the bind port in application mode."""
+    suffix = (
+        "(required for Cloudera AI Applications; "
+        "GUARDRAILS_PORT is ignored in application mode)"
+    )
+    for key in ("CDSW_APP_PORT", "CDSW_READONLY_PORT"):
+        raw = os.environ.get(key)
+        if raw and str(port) == raw.strip():
+            return f"Using {key}={port} {suffix}"
+    return f"Using port {port} {suffix}"
+
+
 def print_startup_banner(
     service: Service,
     *,
@@ -244,8 +257,13 @@ def print_startup_banner(
         print(f"  (http://localhost:{port} also works on the same machine)")
         print("")
         if mode == "application":
+            print(f"  {_application_port_env_line(port)}")
+            print("  GUARDRAILS_PORT only applies to session/bash mode (start_guardrails_server.sh).")
             print("  Cloudera AI Application: use the public HTTPS URL for this app.")
-            print("  Set GUARDRAILS_SERVER_URL on the Streamlit application to that URL.")
+            print(
+                "  On Application 2 (Streamlit), set GUARDRAILS_SERVER_URL to that public "
+                "HTTPS URL — not http://127.0.0.1:8001 or localhost."
+            )
         else:
             print("  Add to .env (match this port):")
             print(f"    GUARDRAILS_PORT={port}")
@@ -271,8 +289,13 @@ def print_startup_banner(
         )
 
     if mode == "application":
+        print(f"  {_application_port_env_line(port)}")
+        print("  GUARDRAILS_PORT only applies to session/bash mode.")
         print("  Cloudera AI Application: open the public HTTPS URL for this app.")
-        print("  Ensure GUARDRAILS_SERVER_URL points at the guardrails application URL.")
+        print(
+            "  Set GUARDRAILS_SERVER_URL to Application 1's public HTTPS URL "
+            "(e.g. https://nemo-guardrails.YOUR-CAI-DOMAIN), not localhost:8001."
+        )
     elif os.environ.get("CDSW_DOMAIN") and os.environ.get("CDSW_MASTER_ID"):
         owner = ""
         project_url = os.environ.get("CDSW_PROJECT_URL", "")
