@@ -17,7 +17,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.guardrails.client import GuardrailsClient, GuardrailsMode, _ensure_text_response
-from src.guardrails.violation_parser import ViolationStore
+from src.guardrails.violation_parser import (
+    ViolationStore,
+    is_actual_violation,
+    policies_checked_and_passed,
+)
 from src.llm.provider import (
     CAIIS_DEFAULT_BASE_URL,
     CAIIS_DEFAULT_MODEL,
@@ -158,20 +162,38 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
     return llm_config, safety_config, mode, selected_policies, server_url
 
 
-def render_guarded_panel(result) -> None:
-    """Render the guarded response column with clear policy vs infra messaging."""
-    st.subheader("✅ With Guardrails")
-    infra_error = result.output_vars.get("guardrails_error")
-    if result.blocked:
+def render_policy_status(result) -> None:
+    """Show violation banner, pass message, or infra warning — not activated rails alone."""
+    output_vars = result.output_vars or {}
+    log_data = result.guardrails_log or {}
+    infra_error = output_vars.get("guardrails_error")
+    actual_violation = result.blocked or is_actual_violation(output_vars, log_data)
+
+    if infra_error and output_vars.get("allowed", True) and not actual_violation:
+        st.warning(infra_error)
+    elif actual_violation:
         st.error("Request blocked by safety policy")
         rail = (
-            result.output_vars.get("triggered_input_rail")
-            or result.output_vars.get("triggered_output_rail")
+            output_vars.get("triggered_input_rail")
+            or output_vars.get("triggered_output_rail")
         )
         if rail:
             st.caption(f"Blocked by rail: {rail}")
-    elif infra_error:
-        st.warning(infra_error)
+    elif policies_checked_and_passed(result.policies, output_vars, log_data):
+        st.success("Policies checked — no violations")
+
+    if actual_violation and result.violations:
+        for v in result.violations:
+            st.warning(
+                f"**Policy:** {v.policy} | **Rail:** {v.rail} | "
+                f"**Blocked:** {v.blocked}"
+            )
+
+
+def render_guarded_panel(result) -> None:
+    """Render the guarded response column with clear policy vs infra messaging."""
+    st.subheader("✅ With Guardrails")
+    render_policy_status(result)
     st.markdown(_ensure_text_response(result.guarded_response))
 
 
@@ -185,10 +207,12 @@ def render_chat_tab(
     st.header("💬 Chat Compare")
     st.caption("Side-by-side guarded vs unguarded responses with agent trace.")
 
-    col_btns = st.columns(4)
-    for i, example in enumerate(EXAMPLE_QUERIES[:4]):
-        if col_btns[i % 4].button(example[:30] + "…", key=f"ex_{i}"):
-            st.session_state["query_input"] = example
+    for row_start in range(0, len(EXAMPLE_QUERIES), 3):
+        col_btns = st.columns(3)
+        for j, example in enumerate(EXAMPLE_QUERIES[row_start : row_start + 3]):
+            label = example if len(example) <= 42 else example[:42] + "…"
+            if col_btns[j].button(label, key=f"ex_{row_start + j}"):
+                st.session_state["query_input"] = example
 
     query = st.text_area(
         "Customer Query",
@@ -214,31 +238,7 @@ def render_chat_tab(
             st.subheader("🚫 Without Guardrails")
             st.markdown(result.unguarded_response)
         with col_r:
-            st.subheader("✅ With Guardrails")
-            infra_error = result.output_vars.get("guardrails_error")
-            if infra_error and result.output_vars.get("allowed", True):
-                st.warning(infra_error)
-            elif result.blocked:
-                st.error("Request blocked by guardrails")
-                if result.output_vars.get("triggered_input_rail"):
-                    st.caption(
-                        f"Blocked by input rail: "
-                        f"{result.output_vars['triggered_input_rail']}"
-                    )
-                elif result.output_vars.get("triggered_output_rail"):
-                    st.caption(
-                        f"Blocked by output rail: "
-                        f"{result.output_vars['triggered_output_rail']}"
-                    )
-            st.markdown(result.guarded_response)
-
-        if result.violations:
-            st.subheader("⚠️ Violations Detected")
-            for v in result.violations:
-                st.warning(
-                    f"**Policy:** {v.policy} | **Rail:** {v.rail} | "
-                    f"**Blocked:** {v.blocked}"
-                )
+            render_guarded_panel(result)
 
         with st.expander("Agent Trace"):
             st.json(result.agent_trace)

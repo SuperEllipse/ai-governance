@@ -160,6 +160,82 @@ class ViolationStore:
             conn.execute("DELETE FROM batch_runs")
 
 
+def _normalize_activated_rails(log_data: dict[str, Any] | None) -> list[str]:
+    """Return rail names from guardrails log activated_rails (list or dict)."""
+    log_data = log_data or {}
+    activated = log_data.get("activated_rails", []) or []
+    if isinstance(activated, dict):
+        return [str(k) for k in activated.keys()]
+    return [str(r) for r in activated]
+
+
+def _rail_has_stop(log_data: dict[str, Any] | None) -> bool:
+    """True if any rail in the log stopped the flow (stop: true)."""
+    log_data = log_data or {}
+    activated = log_data.get("activated_rails", []) or []
+    if isinstance(activated, dict):
+        for rail_info in activated.values():
+            if isinstance(rail_info, dict) and rail_info.get("stop"):
+                return True
+    for key in ("rails", "rail_events", "internal_events"):
+        events = log_data.get(key)
+        if isinstance(events, list):
+            for event in events:
+                if isinstance(event, dict) and event.get("stop"):
+                    return True
+    return False
+
+
+def _stopped_rail_names(log_data: dict[str, Any] | None) -> list[str]:
+    """Rail names that stopped the flow when triggered_*_rail is unset."""
+    log_data = log_data or {}
+    stopped: list[str] = []
+    activated = log_data.get("activated_rails", []) or []
+    if isinstance(activated, dict):
+        for name, rail_info in activated.items():
+            if isinstance(rail_info, dict) and rail_info.get("stop"):
+                stopped.append(str(name))
+    for key in ("rails", "rail_events", "internal_events"):
+        events = log_data.get(key)
+        if isinstance(events, list):
+            for event in events:
+                if isinstance(event, dict) and event.get("stop"):
+                    name = event.get("rail") or event.get("name")
+                    if name:
+                        stopped.append(str(name))
+    return stopped
+
+
+def is_actual_violation(
+    output_vars: dict[str, Any] | None,
+    log_data: dict[str, Any] | None = None,
+) -> bool:
+    """True when guardrails blocked or a rail explicitly stopped the request."""
+    output_vars = output_vars or {}
+    if output_vars.get("allowed") is False:
+        return True
+    if output_vars.get("triggered_input_rail"):
+        return True
+    if output_vars.get("triggered_output_rail"):
+        return True
+    return _rail_has_stop(log_data)
+
+
+def policies_checked_and_passed(
+    policies: list[str],
+    output_vars: dict[str, Any] | None,
+    log_data: dict[str, Any] | None = None,
+) -> bool:
+    """True when policies ran but no block was recorded."""
+    if not policies or is_actual_violation(output_vars, log_data):
+        return False
+    log_data = log_data or {}
+    output_vars = output_vars or {}
+    if log_data.get("activated_rails"):
+        return True
+    return "allowed" in output_vars and output_vars.get("allowed") is not False
+
+
 def parse_guardrails_output(
     query: str,
     response: str,
@@ -177,15 +253,15 @@ def parse_guardrails_output(
     output_vars = output_vars or {}
     log_data = log_data or {}
 
+    if not is_actual_violation(output_vars, log_data):
+        return records
+
     triggered_input = output_vars.get("triggered_input_rail")
     triggered_output = output_vars.get("triggered_output_rail")
     allowed = output_vars.get("allowed", True)
-    activated = log_data.get("activated_rails", []) or []
+    activated = _normalize_activated_rails(log_data)
 
-    if isinstance(activated, dict):
-        activated = list(activated.keys())
-
-    rail_names = []
+    rail_names: list[tuple[str, str]] = []
     if triggered_input:
         rail_names.append(("input", str(triggered_input)))
     if triggered_output:
@@ -194,13 +270,11 @@ def parse_guardrails_output(
     if not rail_names and not allowed:
         rail_names.append(("input", "blocked"))
 
-    if not rail_names and activated:
-        for rail in activated:
-            rail_names.append(("unknown", str(rail)))
-
-    if not rail_names and policies:
-        # No explicit violation — record pass-through for audit
-        return records
+    if not rail_names:
+        for rail in _stopped_rail_names(log_data):
+            rail_names.append(("unknown", rail))
+        if not rail_names:
+            rail_names.append(("unknown", "blocked"))
 
     policy_label = ",".join(policies) if policies else "none"
 
@@ -218,7 +292,7 @@ def parse_guardrails_output(
                 agent=agent,
                 unguarded_response=unguarded_response,
                 guarded_response=response,
-                activated_rails=[str(r) for r in activated] if activated else [],
+                activated_rails=activated,
                 run_id=run_id,
             )
         )
@@ -236,7 +310,7 @@ def parse_guardrails_output(
                 agent=agent,
                 unguarded_response=unguarded_response,
                 guarded_response=response,
-                activated_rails=[str(r) for r in activated] if activated else [],
+                activated_rails=activated,
                 run_id=run_id,
             )
         )
