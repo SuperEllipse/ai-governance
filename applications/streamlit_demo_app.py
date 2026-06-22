@@ -52,7 +52,12 @@ def _detect_mode(cli_mode: str | None) -> str:
     return "session"
 
 
-def main() -> int:
+def _running_under_ipykernel() -> bool:
+    argv0 = os.path.basename(sys.argv[0]) if sys.argv else ""
+    return "ipykernel" in argv0 or "-f" in sys.argv
+
+
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Streamlit banking demo (CAI Application)")
     parser.add_argument(
         "--mode",
@@ -60,7 +65,12 @@ def main() -> int:
         default=None,
         help="Bind strategy: application uses CDSW_APP_PORT on 0.0.0.0; session auto-picks loopback.",
     )
-    args = parser.parse_args()
+    args, _unknown = parser.parse_known_args()
+    return args
+
+
+def main() -> int:
+    args = _parse_args()
 
     project_root = setup_pythonpath(resolve_project_root(_script_anchor()))
     load_dotenv_files(project_root)
@@ -98,5 +108,26 @@ def main() -> int:
     return subprocess.call(cmd)
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+_main_started = False
+
+
+def _should_autostart() -> bool:
+    if __name__ == "__main__":
+        return True
+    if os.environ.get("CDSW_APP_PORT") or os.environ.get("CDSW_READONLY_PORT"):
+        return True
+    return _running_under_ipykernel()
+
+
+def _run() -> None:
+    global _main_started
+    if _main_started:
+        return
+    _main_started = True
+    exit_code = main()
+    if not _running_under_ipykernel():
+        raise SystemExit(exit_code)
+
+
+if _should_autostart():
+    _run()

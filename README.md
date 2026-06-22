@@ -128,7 +128,7 @@ Deploy this demo as **two separate long-running Applications** in Cloudera AI (p
 
 ### Application 1 — NeMo Guardrails server
 
-> **Script path:** In the CAI Application UI, set the entry script to **`applications/guardrails_server_app.py`** (relative to the project root). CAI may run scripts in an IPython/Jupyter context where `__file__` is undefined; the application entry points resolve the project root via `src/runtime/startup.py` fallbacks (`cwd`, `/home/cdsw`, CDSW env hints).
+> **Script path:** In the CAI Application UI, set the entry script to **`applications/guardrails_server_app.py`** (relative to the project root). CAI runs entry scripts via `ipykernel_launcher.py`, which injects Jupyter kernel args (e.g. `-f /tmp/jupyter/runtime/kernel-….json`) into `sys.argv`. The application entry points use `parse_known_args()` to ignore those args, auto-start when `CDSW_APP_PORT` is set, and avoid `SystemExit` under ipykernel so the long-running server stays up. CAI may also run scripts in an IPython context where `__file__` is undefined; project root is resolved via `src/runtime/startup.py` fallbacks (`cwd`, `/home/cdsw`, CDSW env hints).
 
 | Field | Value |
 |-------|-------|
