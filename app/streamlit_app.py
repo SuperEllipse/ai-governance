@@ -1,28 +1,22 @@
-"""NVIDIA NeMo Guardrails Banking Demo — Streamlit UI."""
+import sys
+from pathlib import Path
 
-from __future__ import annotations
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
-try:
-    import pysqlite3
-    import sys
+from src.runtime.sqlite_compat import apply_sqlite3_compat
 
-    sys.modules["sqlite3"] = pysqlite3
-except ImportError:
-    pass
+apply_sqlite3_compat()
 
 import asyncio
 import os
-import sys
-from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# Ensure project root on path
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+ROOT = _ROOT
 
 from src.guardrails.client import GuardrailsClient, GuardrailsMode, _ensure_text_response
 from src.guardrails.violation_parser import (

@@ -10,7 +10,6 @@ from typing import Any, Literal
 
 import httpx
 
-from src.agents.banking_crew import run_banking_crew
 from src.guardrails.config_composer import compose_config
 from src.guardrails.violation_parser import ViolationRecord, parse_guardrails_output
 from src.llm.provider import LLMConfig, SafetyModelConfig, default_llm_config
@@ -236,6 +235,8 @@ class GuardrailsClient:
         run_id: str = "",
     ) -> GuardedResult:
         policies = policies or []
+        from src.agents.banking_crew import run_banking_crew
+
         unguarded_resp, trace = await asyncio.to_thread(
             run_banking_crew, query, self.llm_config
         )

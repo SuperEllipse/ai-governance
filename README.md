@@ -169,6 +169,14 @@ Deploy this demo as **two separate long-running Applications** in Cloudera AI (p
 | **Subdomain** (example) | `banking-demo` |
 | **Public URL** (example) | `https://banking-demo.YOUR-CAI-DOMAIN` |
 
+**One-time engine setup (required):** each CAI Application runs in its own engine/container. Install dependencies once per engine before the first start:
+
+```bash
+pip install -r requirements.txt
+```
+
+This includes `pysqlite3-binary`, which ChromaDB/CrewAI needs when the platform SQLite is older than 3.35. The Streamlit entry point (`applications/streamlit_demo_app.py`) attempts to auto-install `pysqlite3-binary` on startup if it is missing; running `pip install -r requirements.txt` manually is still recommended so all deps are present before deploy.
+
 **Environment variables:**
 
 - Same LLM provider vars as above (`OPENAI_*` or `CAIIS_*` + `CDP_TOKEN`)
@@ -578,7 +586,7 @@ Force CAIIS as sidebar default: `DEFAULT_LLM_PROVIDER=caiis` in `.env`.
 
 ### `RuntimeError` / sqlite3 version check when starting guardrails or Streamlit
 
-ChromaDB (pulled in by CrewAI) requires SQLite ≥ 3.35. If the system `sqlite3` module is older, install `pysqlite3-binary` (`pip install pysqlite3-binary`) — the Streamlit and guardrails entry points patch `sys.modules["sqlite3"]` automatically when that package is present.
+ChromaDB (pulled in by CrewAI) requires SQLite ≥ 3.35. If the system `sqlite3` module is older, install `pysqlite3-binary` once per engine: `pip install -r requirements.txt` or `pip install pysqlite3-binary`. Entry points call `src.runtime.sqlite_compat.apply_sqlite3_compat()` before importing CrewAI/ChromaDB; if the shim package is missing, startup fails with an explicit install message instead of a silent import error.
 
 ### `CDP_TOKEN` not set for CAIIS
 

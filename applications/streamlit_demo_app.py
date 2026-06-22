@@ -3,17 +3,6 @@
 
 from __future__ import annotations
 
-try:
-    import pysqlite3
-    import sys
-
-    sys.modules["sqlite3"] = pysqlite3
-except ImportError:
-    pass
-
-import argparse
-import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -35,6 +24,12 @@ def _bootstrap_import_path() -> None:
 
 
 _bootstrap_import_path()
+
+from src.runtime.sqlite_compat import apply_sqlite3_compat, needs_pysqlite3_shim  # noqa: E402
+
+import argparse
+import os
+import subprocess
 
 from src.runtime.startup import (  # noqa: E402
     load_dotenv_files,
@@ -67,6 +62,22 @@ def _running_under_ipykernel() -> bool:
     return "ipykernel" in argv0 or "-f" in sys.argv
 
 
+def _ensure_sqlite_compat() -> None:
+    """Apply sqlite3 shim; auto-install pysqlite3-binary on CAI engines when missing."""
+    if needs_pysqlite3_shim():
+        try:
+            import pysqlite3  # noqa: F401
+        except ImportError:
+            print(
+                "System sqlite3 is too old for ChromaDB; installing pysqlite3-binary…",
+                file=sys.stderr,
+            )
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "pysqlite3-binary"],
+            )
+    apply_sqlite3_compat()
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Streamlit banking demo (CAI Application)")
     parser.add_argument(
@@ -84,6 +95,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    _ensure_sqlite_compat()
 
     project_root = setup_pythonpath(resolve_project_root(_script_anchor()))
     load_dotenv_files(project_root)
