@@ -28,7 +28,7 @@ GUARDRAILS_OPTIONS = {
         "triggered_output_rail",
         "allowed",
     ],
-    "log": {"activated_rails": True, "llm_calls": False},
+    "log": {"activated_rails": True, "llm_calls": True},
 }
 
 _INTERNAL_ERROR_MARKERS = (
@@ -45,6 +45,23 @@ _INFRASTRUCTURE_ERROR_MARKERS = (
     "unable to perform operation",
     "error invoking llm",
 )
+
+
+def _merge_guardrails_logs(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
+    """Merge activated_rails and llm_calls from two guardrails log payloads."""
+    if not base:
+        return extra or {}
+    if not extra:
+        return base
+    merged = dict(base)
+    base_rails = list(merged.get("activated_rails") or [])
+    extra_rails = list(extra.get("activated_rails") or [])
+    merged["activated_rails"] = base_rails + extra_rails
+    base_calls = list(merged.get("llm_calls") or [])
+    extra_calls = list(extra.get("llm_calls") or [])
+    if base_calls or extra_calls:
+        merged["llm_calls"] = base_calls + extra_calls
+    return merged
 
 
 def _looks_like_internal_error(text: str) -> bool:
@@ -318,6 +335,38 @@ class GuardrailsClient:
             True,
         )
 
+    def _embedded_generate_options(self, rail_types: list[Any]) -> dict[str, Any]:
+        """Generation options for embedded checks with violation-reason logging."""
+        return {
+            "rails": [r.value for r in rail_types],
+            "output_vars": GUARDRAILS_OPTIONS["output_vars"],
+            "log": GUARDRAILS_OPTIONS["log"],
+        }
+
+    def _embedded_generate_check(
+        self,
+        rails: Any,
+        messages: list[dict[str, str]],
+        rail_types: list[Any],
+    ) -> tuple[Any, dict[str, Any], dict[str, Any], str | None, str]:
+        """Run input/output rails via generate_async and return response + metadata."""
+        from nemoguardrails.rails.llm.llmrails import (
+            _get_blocking_rail,
+            _get_last_response_content,
+        )
+
+        loop = asyncio.get_event_loop()
+        response = loop.run_until_complete(
+            rails.generate_async(
+                messages=messages,
+                options=self._embedded_generate_options(rail_types),
+            )
+        )
+        log_data, output_vars = _extract_generation_metadata(response)
+        blocking_rail = _get_blocking_rail(response)
+        content = _ensure_text_response(_get_last_response_content(response))
+        return response, log_data, output_vars, blocking_rail, content
+
     def _run_embedded_sync(
         self,
         query: str,
@@ -325,7 +374,7 @@ class GuardrailsClient:
         agent_response: str,
     ) -> tuple[str, dict, dict, bool]:
         try:
-            from nemoguardrails.rails.llm.options import RailStatus, RailType
+            from nemoguardrails.rails.llm.options import RailType
         except ImportError as exc:
             return (
                 f"NeMo Guardrails not installed: {exc}",
@@ -340,42 +389,50 @@ class GuardrailsClient:
             log_data: dict[str, Any] = {}
             output_vars: dict[str, Any] = {"allowed": True}
 
-            input_result = rails.check(
-                messages=[{"role": "user", "content": query}],
-                rail_types=[RailType.INPUT],
+            _, input_log, input_vars, input_blocking, input_content = (
+                self._embedded_generate_check(
+                    rails,
+                    [{"role": "user", "content": query}],
+                    [RailType.INPUT],
+                )
             )
-            input_content, input_blocked = self._resolve_rail_result(
-                input_result,
-                agent_response,
-                rail_kind="input",
-            )
-            if input_blocked:
+            log_data = input_log
+            if input_blocking:
                 output_vars = {
                     "allowed": False,
-                    "triggered_input_rail": input_result.rail,
+                    "triggered_input_rail": input_blocking,
+                    **{k: v for k, v in input_vars.items() if k in output_vars or k.startswith("triggered_")},
                 }
+                output_vars["allowed"] = False
+                output_vars["triggered_input_rail"] = input_blocking
+                _, _ = self._resolve_rail_result_content(
+                    input_content, agent_response, rail_kind="input", blocked=True
+                )
                 return input_content, log_data, output_vars, True
 
-            output_result = rails.check(
-                messages=[
-                    {"role": "user", "content": query},
-                    {"role": "assistant", "content": agent_response},
-                ],
-                rail_types=[RailType.OUTPUT],
+            _, output_log, output_vars_raw, output_blocking, output_content = (
+                self._embedded_generate_check(
+                    rails,
+                    [
+                        {"role": "user", "content": query},
+                        {"role": "assistant", "content": agent_response},
+                    ],
+                    [RailType.OUTPUT],
+                )
             )
-            output_content, output_blocked = self._resolve_rail_result(
-                output_result,
-                agent_response,
-                rail_kind="output",
-            )
-            if output_blocked:
+            log_data = _merge_guardrails_logs(log_data, output_log)
+            if output_blocking:
                 output_vars = {
                     "allowed": False,
-                    "triggered_output_rail": output_result.rail,
+                    "triggered_output_rail": output_blocking,
+                    **{k: v for k, v in output_vars_raw.items() if k.startswith("triggered_")},
                 }
+                _, _ = self._resolve_rail_result_content(
+                    output_content, agent_response, rail_kind="output", blocked=True
+                )
                 return output_content, log_data, output_vars, True
 
-            if output_result.status == RailStatus.MODIFIED:
+            if output_content != agent_response:
                 output_vars = {"allowed": True}
                 return output_content, log_data, output_vars, False
 
@@ -383,6 +440,34 @@ class GuardrailsClient:
         except Exception as exc:
             logger.exception("Embedded guardrails sync check failed")
             return self._embedded_error_result(agent_response, exc)
+
+    def _resolve_rail_result_content(
+        self,
+        content: str,
+        agent_response: str,
+        rail_kind: str,
+        blocked: bool,
+    ) -> tuple[str, bool]:
+        """Map generated rail content to display text and blocked flag."""
+        if _looks_like_infrastructure_error(content):
+            logger.warning(
+                "Guardrails %s check hit connection error",
+                rail_kind,
+            )
+            raise RuntimeError(content)
+        if _looks_like_internal_error(content) or _looks_like_raw_generation_response(
+            content
+        ):
+            logger.warning(
+                "Guardrails %s check returned internal error; using agent response",
+                rail_kind,
+            )
+            return agent_response, False
+        if blocked:
+            return content, True
+        if content != agent_response:
+            return content, False
+        return agent_response, False
 
     def _resolve_rail_result(
         self,

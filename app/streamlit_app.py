@@ -261,14 +261,21 @@ def render_policy_status(result) -> None:
         )
         if rail:
             st.caption(f"Blocked by rail: {rail}")
+        for v in result.violations:
+            reason = v.policy_reason or v.violated_rule
+            if reason:
+                st.caption(f"Policy violated: {reason}")
+                break
     elif policies_checked_and_passed(result.policies, output_vars, log_data):
         st.success("Policies checked — no violations")
 
     if actual_violation and result.violations:
         for v in result.violations:
+            reason = v.policy_reason or v.violated_rule
+            reason_suffix = f" | **Policy violated:** {reason}" if reason else ""
             st.warning(
                 f"**Policy:** {v.policy} | **Rail:** {v.rail} | "
-                f"**Blocked:** {v.blocked}"
+                f"**Blocked:** {v.blocked}{reason_suffix}"
             )
 
 
@@ -337,7 +344,21 @@ def render_chat_tab(
         with st.expander("Agent Trace"):
             st.json(result.agent_trace)
         with st.expander("Guardrails Log"):
-            st.json({"output_vars": result.output_vars, "log": result.guardrails_log})
+            log_view: dict = {
+                "output_vars": result.output_vars,
+                "log": result.guardrails_log,
+            }
+            if result.violations:
+                log_view["policy_violations"] = [
+                    {
+                        "rail": v.rail,
+                        "policy": v.policy,
+                        "policy_reason": v.policy_reason,
+                        "violated_rule": v.violated_rule,
+                    }
+                    for v in result.violations
+                ]
+            st.json(log_view)
 
     elif st.session_state.last_result:
         result = st.session_state.last_result
@@ -422,7 +443,15 @@ def render_batch_tab(
     if violations:
         df = pd.DataFrame(violations)
         display_cols = [
-            "id", "query", "policy", "rail", "blocked", "category", "agent", "timestamp"
+            "id",
+            "query",
+            "policy",
+            "rail",
+            "policy_reason",
+            "blocked",
+            "category",
+            "agent",
+            "timestamp",
         ]
         display_cols = [c for c in display_cols if c in df.columns]
         st.dataframe(df[display_cols], use_container_width=True, hide_index=True)
@@ -435,6 +464,8 @@ def render_batch_tab(
             row = df[df["id"] == selected_id].iloc[0]
             st.markdown("### Drill-down Detail")
             st.markdown(f"**Query:** {row['query']}")
+            if row.get("policy_reason"):
+                st.markdown(f"**Policy violated:** {row['policy_reason']}")
             col_a, col_b = st.columns(2)
             with col_a:
                 st.markdown("**Unguarded Response**")

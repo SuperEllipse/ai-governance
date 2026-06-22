@@ -14,6 +14,8 @@ prompts:
       User message: "{{ user_input }}"
 
       Question: Should the user message be blocked (Yes or No)?
+      If Yes, add one line: Violated rule: <short phrase citing the policy line>
+
       Answer:
 
   - task: self_check_output
@@ -29,6 +31,8 @@ prompts:
       Bot response: "{{ bot_response }}"
 
       Question: Should the response be blocked (Yes or No)?
+      If Yes, add one line: Violated rule: <short phrase citing the policy line>
+
       Answer:
 
   - task: topic_check
