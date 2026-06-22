@@ -193,6 +193,12 @@ def _patch_openai_models(config_path: Path, base_url: str, model_name: str, api_
         yaml.dump(merged, f, default_flow_style=False)
 
 
+def get_rails_config_parent(source_dir: Path | str) -> Path:
+    """Return the NeMo ``rails_config_path`` parent (e.g. ``guardrails/`` for ``base/``)."""
+    rails_root, _, _ = resolve_rails_layout(source_dir)
+    return rails_root
+
+
 def prepare_server_config_from_env(source_dir: Path | str) -> Path:
     """Return NeMo ``rails_config_path`` with optional MAIN_MODEL_* env overrides.
 
@@ -202,7 +208,7 @@ def prepare_server_config_from_env(source_dir: Path | str) -> Path:
     Always returns a directory layout where ``<root>/<config_id>/config.yml``
     exists (never a bare single-config temp dir with an unstable id).
     """
-    rails_root, config_subdir, _config_id = resolve_rails_layout(source_dir)
+    rails_root, config_subdir, config_id = resolve_rails_layout(source_dir)
     base_url = os.environ.get("MAIN_MODEL_BASE_URL", "").strip()
     model_name = os.environ.get("MAIN_MODEL_NAME", "").strip()
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
@@ -211,13 +217,9 @@ def prepare_server_config_from_env(source_dir: Path | str) -> Path:
         return rails_root
 
     tmp_root = Path(tempfile.mkdtemp(prefix="nemo_guardrails_server_"))
-    if config_subdir == rails_root:
-        dest_subdir = tmp_root / _config_id
-        shutil.copytree(config_subdir, dest_subdir, dirs_exist_ok=True)
-        config_path = dest_subdir / "config.yml"
-    else:
-        shutil.copytree(rails_root, tmp_root, dirs_exist_ok=True)
-        config_path = tmp_root / config_subdir.relative_to(rails_root) / "config.yml"
+    dest_subdir = tmp_root / config_id
+    shutil.copytree(config_subdir, dest_subdir, dirs_exist_ok=True)
+    config_path = dest_subdir / "config.yml"
 
     _patch_openai_models(config_path, base_url, model_name, api_key)
     return tmp_root

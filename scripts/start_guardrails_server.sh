@@ -39,8 +39,17 @@ read -r BIND_HOST PORT < <(pick_guardrails_bind)
 export GUARDRAILS_HOST="${BIND_HOST}"
 export GUARDRAILS_PORT="${PORT}"
 
+RAILS_CONFIG_PATH="$(python3 -c "
+import sys
+sys.path.insert(0, '${ROOT}')
+from src.guardrails.config_composer import get_rails_config_parent
+print(get_rails_config_parent('${CONFIG_PATH}'))
+")"
+
 echo "Starting NeMo Guardrails server..."
-echo "  Config: $CONFIG_PATH"
+echo "  Config source: ${CONFIG_PATH}"
+echo "  rails_config_path: ${RAILS_CONFIG_PATH}"
+echo "  default config_id: ${DEFAULT_CONFIG_ID}"
 echo "  Bind:   ${BIND_HOST}:${PORT}"
 echo "  Model:  $MAIN_MODEL_NAME"
 echo "  Base:   $MAIN_MODEL_BASE_URL"
