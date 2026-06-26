@@ -33,6 +33,7 @@ GUARDRAILS_OPTIONS = {
 _INTERNAL_ERROR_MARKERS = (
     "internal error has occurred",
     "an internal error",
+    "internal server error",
 )
 
 _INFRASTRUCTURE_ERROR_MARKERS = (
@@ -46,7 +47,23 @@ _INFRASTRUCTURE_ERROR_MARKERS = (
 )
 
 
-def _merge_guardrails_logs(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
+def _label_guardrails_provider(log_data: dict[str, Any], llm_config: LLMConfig) -> dict[str, Any]:
+    """Cosmetic: show CAIIS label in guardrails logs instead of generic openai."""
+    if llm_config.provider != "caiis":
+        return log_data
+    label = "Cloudera AI Inference Service"
+    calls = log_data.get("llm_calls")
+    if isinstance(calls, list):
+        for entry in calls:
+            if isinstance(entry, dict) and entry.get("llm_provider_name") == "openai":
+                entry["llm_provider_name"] = label
+    return log_data
+
+
+def _merge_guardrails_logs(
+    base: dict[str, Any] | None,
+    extra: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Merge activated_rails and llm_calls from two guardrails log payloads."""
     if not base:
         return extra or {}
@@ -61,6 +78,54 @@ def _merge_guardrails_logs(base: dict[str, Any], extra: dict[str, Any]) -> dict[
     if base_calls or extra_calls:
         merged["llm_calls"] = base_calls + extra_calls
     return merged
+
+
+DEFAULT_BLOCK_REFUSAL = (
+    "I'm sorry, I can't help with that request. "
+    "Please ask about retail banking services such as accounts, cards, or mortgages."
+)
+
+
+def _friendly_block_refusal(
+    query: str,
+    triggered_rail: str | None,
+    log_data: dict[str, Any],
+    output_vars: dict[str, Any] | None = None,
+) -> str:
+    """Build a user-facing refusal when guardrails blocked the request."""
+    from src.guardrails.violation_parser import extract_policy_reason
+
+    if output_vars and output_vars.get("policy_reason"):
+        return DEFAULT_BLOCK_REFUSAL
+
+    rail = triggered_rail or "blocked"
+    rail_type = "output" if output_vars and output_vars.get("triggered_output_rail") else "input"
+    reason, _ = extract_policy_reason(rail, rail_type, query, log_data)
+    if reason:
+        return DEFAULT_BLOCK_REFUSAL
+    return DEFAULT_BLOCK_REFUSAL
+
+
+def _is_successful_policy_block(
+    output_vars: dict[str, Any] | None,
+    log_data: dict[str, Any] | None = None,
+) -> bool:
+    """True when guardrails metadata indicates an intentional policy block."""
+    output_vars = output_vars or {}
+    if output_vars.get("allowed") is False:
+        return True
+    if output_vars.get("triggered_input_rail") or output_vars.get("triggered_output_rail"):
+        return True
+    log_data = log_data or {}
+    activated = log_data.get("activated_rails") or []
+    if activated:
+        if isinstance(activated, dict):
+            for info in activated.values():
+                if isinstance(info, dict) and info.get("stop"):
+                    return True
+        elif isinstance(activated, list) and len(activated) > 0:
+            return True
+    return False
 
 
 def _looks_like_internal_error(text: str) -> bool:
@@ -386,6 +451,11 @@ class GuardrailsClient:
 
         try:
             _prepare_worker_event_loop()
+            if self.safety_config.mode == "llama_guard":
+                blocked = self._llama_guard_input_block(query)
+                if blocked:
+                    return blocked
+
             rails = self._create_embedded_rails(policies)
             log_data: dict[str, Any] = {}
             output_vars: dict[str, Any] = {"allowed": True}
@@ -397,7 +467,7 @@ class GuardrailsClient:
                     [RailType.INPUT],
                 )
             )
-            log_data = input_log
+            log_data = _label_guardrails_provider(input_log, self.llm_config)
             if input_blocking:
                 output_vars = {
                     "allowed": False,
@@ -421,7 +491,10 @@ class GuardrailsClient:
                     [RailType.OUTPUT],
                 )
             )
-            log_data = _merge_guardrails_logs(log_data, output_log)
+            log_data = _label_guardrails_provider(
+                _merge_guardrails_logs(log_data, output_log),
+                self.llm_config,
+            )
             if output_blocking:
                 output_vars = {
                     "allowed": False,
@@ -432,6 +505,11 @@ class GuardrailsClient:
                     output_content, agent_response, rail_kind="output", blocked=True
                 )
                 return output_content, log_data, output_vars, True
+
+            if self.safety_config.mode == "llama_guard":
+                blocked = self._llama_guard_output_block(agent_response)
+                if blocked:
+                    return blocked
 
             if output_content != agent_response:
                 output_vars = {"allowed": True}
@@ -470,6 +548,58 @@ class GuardrailsClient:
             return content, False
         return agent_response, False
 
+    def _llama_guard_input_block(
+        self, query: str
+    ) -> tuple[str, dict[str, Any], dict[str, Any], bool] | None:
+        from src.guardrails.llama_guard import block_refusal_for_category, check_llama_guard
+
+        result = check_llama_guard(query, self.safety_config, context_label="user")
+        if result.error:
+            logger.warning("Llama Guard input check skipped: %s", result.error)
+            return None
+        if not result.blocked:
+            return None
+        refusal, reason = block_refusal_for_category(result.category)
+        log_data = {
+            "llama_guard": {
+                "input": result.raw_response,
+                "category": result.category,
+            }
+        }
+        output_vars = {
+            "allowed": False,
+            "triggered_input_rail": "llama guard input",
+            "policy_reason": reason,
+        }
+        return refusal, log_data, output_vars, True
+
+    def _llama_guard_output_block(
+        self, agent_response: str
+    ) -> tuple[str, dict[str, Any], dict[str, Any], bool] | None:
+        from src.guardrails.llama_guard import block_refusal_for_category, check_llama_guard
+
+        result = check_llama_guard(
+            agent_response, self.safety_config, context_label="assistant"
+        )
+        if result.error:
+            logger.warning("Llama Guard output check skipped: %s", result.error)
+            return None
+        if not result.blocked:
+            return None
+        refusal, reason = block_refusal_for_category(result.category)
+        log_data = {
+            "llama_guard": {
+                "output": result.raw_response,
+                "category": result.category,
+            }
+        }
+        output_vars = {
+            "allowed": False,
+            "triggered_output_rail": "llama guard output",
+            "policy_reason": reason,
+        }
+        return refusal, log_data, output_vars, True
+
     def _resolve_rail_result(
         self,
         result: Any,
@@ -507,20 +637,21 @@ class GuardrailsClient:
         policies: list[str],
         agent_context: str,
     ) -> tuple[str, dict, dict, bool]:
+        if self.safety_config.mode == "llama_guard":
+            blocked = await asyncio.to_thread(self._llama_guard_input_block, query)
+            if blocked:
+                return blocked
+
         url = f"{self.server_url}/v1/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self.llm_config.api_key:
             headers["Authorization"] = f"Bearer {self.llm_config.api_key}"
 
-        enriched_query = (
-            f"{query}\n\n[Agent context: {agent_context[:500]}]"
-            if agent_context
-            else query
-        )
-
+        # Input rails should judge the user query only. Agent draft text belongs in
+        # embedded output checks, not mixed into the user message for server mode.
         payload = {
             "model": self.llm_config.model,
-            "messages": [{"role": "user", "content": enriched_query}],
+            "messages": [{"role": "user", "content": query}],
             "guardrails": {
                 "config_id": DEFAULT_GUARDRAILS_CONFIG_ID,
                 "options": GUARDRAILS_OPTIONS,
@@ -540,6 +671,14 @@ class GuardrailsClient:
                 {},
                 False,
             )
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text[:500] if exc.response is not None else str(exc)
+            return (
+                f"Server guardrails error ({exc.response.status_code}): {detail}",
+                {},
+                {},
+                False,
+            )
         except Exception as exc:
             return f"Server guardrails error: {exc}", {}, {}, False
 
@@ -547,9 +686,44 @@ class GuardrailsClient:
         message = choice.get("message", {})
         content = _ensure_text_response(message.get("content", "") or message)
         guardrails_meta = data.get("guardrails", {}) or message.get("guardrails", {})
-        log_data = guardrails_meta.get("log", {})
+        log_data = _label_guardrails_provider(
+            guardrails_meta.get("log", {}),
+            self.llm_config,
+        )
         output_vars = guardrails_meta.get("output_data", guardrails_meta.get("output_vars", {}))
+
+        triggered_rail = output_vars.get("triggered_input_rail") or output_vars.get(
+            "triggered_output_rail"
+        )
         allowed = output_vars.get("allowed", True)
+        is_block = _is_successful_policy_block(output_vars, log_data)
+
+        if is_block:
+            if (
+                _looks_like_internal_error(content)
+                or not content.strip()
+                or content.strip().lower().startswith("i'm sorry, an internal error")
+            ):
+                content = _friendly_block_refusal(query, triggered_rail, log_data, output_vars)
+            return content, log_data, output_vars, True
+
+        if self.safety_config.mode == "llama_guard":
+            blocked = await asyncio.to_thread(
+                self._llama_guard_output_block, agent_context
+            )
+            if blocked:
+                return blocked
+
+        if _looks_like_internal_error(content):
+            return (
+                "Guardrails server returned an internal error during safety checks. "
+                "Check guardrails server logs for LLMCallException details "
+                "(common with reasoning models when self_check misparses Yes/No). "
+                "Ensure CAIIS_MAX_TOKENS>=1024 and restart the guardrails server.",
+                log_data,
+                {"allowed": False, "guardrails_error": content},
+                False,
+            )
         return content, log_data, output_vars, not allowed
 
 

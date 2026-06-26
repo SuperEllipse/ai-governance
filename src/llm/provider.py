@@ -7,8 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from crewai import LLM
-
 
 ProviderName = Literal["openai", "caiis"]
 
@@ -19,6 +17,12 @@ CAIIS_DEFAULT_MODEL = "nvidia/nemotron-3-nano"
 CAIIS_DEFAULT_MAX_TOKENS = 1024
 OPENAI_DEFAULT_MAX_TOKENS = 512
 CAIIS_PLACEHOLDER_MARKERS = ("YOUR-DOMAIN", "YOUR-MODEL")
+
+LLAMA_GUARD_DEFAULT_BASE_URL = (
+    "https://ai-inference.YOUR-DOMAIN/namespaces/serving-default/endpoints/llama-guard-3/openai/v1"
+)
+LLAMA_GUARD_DEFAULT_MODEL = "meta-llama/Llama-Guard-3-8B"
+LLAMA_GUARD_PLACEHOLDER_MARKERS = ("YOUR-DOMAIN", "YOUR-MODEL")
 
 
 def _default_max_tokens(provider: ProviderName) -> int:
@@ -151,7 +155,9 @@ def format_llm_connection_error(exc: Exception, config: LLMConfig) -> str:
     return msg
 
 
-def create_crewai_llm(config: LLMConfig | None = None) -> LLM:
+def create_crewai_llm(config: LLMConfig | None = None) -> Any:
+    from crewai import LLM
+
     cfg = config or default_llm_config()
     if cfg.provider == "caiis" and not cfg.api_key:
         cfg.api_key = _read_cdp_token()
@@ -183,9 +189,28 @@ def create_openai_client_kwargs(config: LLMConfig) -> dict[str, Any]:
     }
 
 
+SafetyMode = Literal["self_check", "llama_guard", "nim"]
+
+
+def is_llama_guard_configured() -> bool:
+    """True when LLAMA_GUARD_BASE_URL is set to a non-placeholder endpoint."""
+    url = os.getenv("LLAMA_GUARD_BASE_URL", "").strip()
+    if not url:
+        return False
+    return not any(marker in url for marker in LLAMA_GUARD_PLACEHOLDER_MARKERS)
+
+
+def detect_default_safety_mode() -> SafetyMode:
+    """Pick default sidebar safety mode from env."""
+    override = os.getenv("DEFAULT_SAFETY_MODE", "").strip().lower()
+    if override in ("self_check", "llama_guard", "nim"):
+        return override  # type: ignore[return-value]
+    return "self_check"
+
+
 @dataclass
 class SafetyModelConfig:
-    mode: Literal["self_check", "nim"] = "self_check"
+    mode: SafetyMode = "self_check"
     nim_model: str = "nvidia/llama-3.1-nemoguard-8b-content-safety"
     nim_api_key: str = field(default_factory=lambda: os.getenv("NVIDIA_API_KEY", ""))
     nim_base_url: str = field(
@@ -193,11 +218,24 @@ class SafetyModelConfig:
             "NIM_BASE_URL", "https://integrate.api.nvidia.com/v1"
         )
     )
+    llama_guard_model: str = field(
+        default_factory=lambda: os.getenv("LLAMA_GUARD_MODEL", LLAMA_GUARD_DEFAULT_MODEL)
+    )
+    llama_guard_base_url: str = field(
+        default_factory=lambda: os.getenv(
+            "LLAMA_GUARD_BASE_URL", LLAMA_GUARD_DEFAULT_BASE_URL
+        )
+    )
+    llama_guard_api_key: str = field(default_factory=_read_cdp_token)
 
     def safety_engine(self) -> str:
-        return "nim" if self.mode == "nim" else "openai"
+        if self.mode == "nim":
+            return "nim"
+        return "openai"
 
     def safety_model_name(self, main_config: LLMConfig) -> str:
         if self.mode == "nim":
             return self.nim_model
+        if self.mode == "llama_guard":
+            return self.llama_guard_model
         return main_config.model

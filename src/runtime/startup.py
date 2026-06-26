@@ -120,13 +120,14 @@ def configure_guardrails_llm_env() -> None:
     os.environ.setdefault("MAIN_MODEL_ENGINE", "openai")
 
     if os.environ.get("CAIIS_BASE_URL"):
-        from src.llm.provider import CAIIS_DEFAULT_MODEL
+        from src.llm.provider import CAIIS_DEFAULT_MODEL, is_caiis_configured
 
-        os.environ.setdefault(
-            "MAIN_MODEL_NAME",
-            os.environ.get("CAIIS_MODEL", CAIIS_DEFAULT_MODEL),
-        )
-        os.environ.setdefault("MAIN_MODEL_BASE_URL", os.environ["CAIIS_BASE_URL"])
+        if is_caiis_configured():
+            os.environ.setdefault(
+                "MAIN_MODEL_NAME",
+                os.environ.get("CAIIS_MODEL", CAIIS_DEFAULT_MODEL),
+            )
+            os.environ.setdefault("MAIN_MODEL_BASE_URL", os.environ["CAIIS_BASE_URL"])
     else:
         os.environ.setdefault("MAIN_MODEL_NAME", os.environ["OPENAI_MODEL"])
         os.environ.setdefault("MAIN_MODEL_BASE_URL", os.environ["OPENAI_BASE_URL"])
@@ -137,7 +138,9 @@ def configure_guardrails_llm_env() -> None:
             os.environ["CDP_TOKEN"] = token
 
     if os.environ.get("CAIIS_BASE_URL") and not os.environ.get("OPENAI_API_KEY"):
-        if os.environ.get("CDP_TOKEN"):
+        from src.llm.provider import is_caiis_configured
+
+        if is_caiis_configured() and os.environ.get("CDP_TOKEN"):
             os.environ["OPENAI_API_KEY"] = os.environ["CDP_TOKEN"]
 
     if not os.environ.get("OPENAI_API_KEY"):

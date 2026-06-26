@@ -22,6 +22,8 @@ POLICY_REASONS: dict[str, str] = {
     "jailbreak detection heuristics": "Prompt injection / jailbreak attempt",
     "topic safety check input": "Off-topic request (not retail banking)",
     "topic safety check output": "Off-topic content in response",
+    "llama guard input": "Content flagged as unsafe by Llama Guard",
+    "llama guard output": "Bot response flagged as unsafe by Llama Guard",
 }
 
 # Keyword → reason when inferring from user query (self_check input blocks).
@@ -554,6 +556,9 @@ def parse_guardrails_output(
         policy_reason, violated_rule = extract_policy_reason(
             bare_rail, rail_type, query, log_data
         )
+        if not policy_reason and output_vars.get("policy_reason"):
+            policy_reason = str(output_vars["policy_reason"])
+            violated_rule = policy_reason
         records.append(
             ViolationRecord(
                 query=query,

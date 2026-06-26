@@ -27,13 +27,17 @@ from src.guardrails.violation_parser import (
 from src.llm.provider import (
     CAIIS_DEFAULT_BASE_URL,
     CAIIS_DEFAULT_MODEL,
+    LLAMA_GUARD_DEFAULT_BASE_URL,
+    LLAMA_GUARD_DEFAULT_MODEL,
     LLMConfig,
     SafetyModelConfig,
     default_caiis_config,
     default_openai_config,
     detect_default_provider,
+    detect_default_safety_mode,
     get_llm_config,
     is_caiis_configured,
+    is_llama_guard_configured,
 )
 from src.simulation.batch_runner import run_batch
 from src.simulation.queries import EXAMPLE_QUERIES, ExampleQuery, get_all_queries
@@ -207,11 +211,25 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
     )
 
     st.sidebar.subheader("Safety Model")
+    safety_options = [
+        ("self_check", "Main LLM (self_check)"),
+        ("llama_guard", "Llama Guard 3 (CAII)"),
+        ("nim", "NVIDIA NIM"),
+    ]
+    default_safety = detect_default_safety_mode()
+    default_idx = next(
+        (i for i, (mode, _) in enumerate(safety_options) if mode == default_safety),
+        0,
+    )
     safety_mode_label = st.sidebar.radio(
         "Safety Check Engine",
-        ["Main LLM (self_check)", "NVIDIA NIM"],
+        [label for _, label in safety_options],
+        index=default_idx,
+        help="self_check uses the main LLM as judge. Llama Guard 3 calls a separate CAII endpoint.",
     )
-    safety_mode = "nim" if "NIM" in safety_mode_label else "self_check"
+    safety_mode = next(
+        mode for mode, label in safety_options if label == safety_mode_label
+    )
     nim_key = ""
     if safety_mode == "nim":
         nim_key = st.sidebar.text_input(
@@ -222,7 +240,29 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
         if not nim_key:
             st.sidebar.warning("NIM not configured — will fall back to self_check behavior.")
 
-    safety_config = SafetyModelConfig(mode=safety_mode, nim_api_key=nim_key)
+    llama_guard_base = os.getenv("LLAMA_GUARD_BASE_URL", LLAMA_GUARD_DEFAULT_BASE_URL)
+    llama_guard_model = os.getenv("LLAMA_GUARD_MODEL", LLAMA_GUARD_DEFAULT_MODEL)
+    if safety_mode == "llama_guard":
+        llama_guard_base = st.sidebar.text_input(
+            "Llama Guard Base URL",
+            value=llama_guard_base,
+            help="OpenAI-compatible CAII endpoint for meta-llama/Llama-Guard-3-8B.",
+        )
+        llama_guard_model = st.sidebar.text_input(
+            "Llama Guard Model",
+            value=llama_guard_model,
+        )
+        if not is_llama_guard_configured() and "YOUR-DOMAIN" in llama_guard_base:
+            st.sidebar.warning(
+                "Set LLAMA_GUARD_BASE_URL in .env or enter your Llama Guard CAII endpoint above."
+            )
+
+    safety_config = SafetyModelConfig(
+        mode=safety_mode,
+        nim_api_key=nim_key,
+        llama_guard_base_url=llama_guard_base,
+        llama_guard_model=llama_guard_model,
+    )
 
     st.sidebar.subheader("Guardrails Mode")
     mode_options = ["Centralized Server", "Embedded", "Unguarded Only"]
@@ -274,8 +314,8 @@ def render_policy_status(result) -> None:
     infra_error = output_vars.get("guardrails_error")
     actual_violation = result.blocked or is_actual_violation(output_vars, log_data)
 
-    if infra_error and output_vars.get("allowed", True) and not actual_violation:
-        st.warning(infra_error)
+    if infra_error and not actual_violation:
+        st.error(infra_error)
     elif actual_violation:
         st.error("Request blocked by safety policy")
         rail = (

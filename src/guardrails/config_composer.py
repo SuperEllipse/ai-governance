@@ -81,6 +81,11 @@ def _build_models_config(llm_config: LLMConfig, safety: SafetyModelConfig) -> li
         safety_model["parameters"]["base_url"] = safety.nim_base_url
         if safety.nim_api_key:
             safety_model["parameters"]["api_key"] = safety.nim_api_key
+    elif safety.mode == "llama_guard":
+        safety_model["parameters"]["base_url"] = safety.llama_guard_base_url
+        if safety.llama_guard_api_key:
+            safety_model["parameters"]["api_key"] = safety.llama_guard_api_key
+        safety_model["parameters"]["max_tokens"] = 16
     else:
         safety_model["parameters"]["max_tokens"] = llm_config.max_tokens
         if llm_config.base_url:
@@ -89,6 +94,19 @@ def _build_models_config(llm_config: LLMConfig, safety: SafetyModelConfig) -> li
             safety_model["parameters"]["api_key"] = llm_config.api_key
 
     return [main_model, safety_model]
+
+
+def _strip_self_check_flows(rails: dict[str, Any]) -> dict[str, Any]:
+    """Remove self_check flows when using Llama Guard instead."""
+    for rail_type in ("input", "output", "retrieval"):
+        section = rails.get(rail_type, {})
+        flows = section.get("flows")
+        if isinstance(flows, list):
+            section["flows"] = [
+                f for f in flows if "self check" not in str(f).lower()
+            ]
+            rails[rail_type] = section
+    return rails
 
 
 def compose_config(
@@ -110,6 +128,8 @@ def compose_config(
     merged["models"] = _build_models_config(llm_config, safety)
 
     rails = merged.get("rails", {})
+    if safety.mode == "llama_guard":
+        rails = _strip_self_check_flows(rails)
     base_rails = _load_yaml(BASE_DIR / "config.yml").get("rails", {})
     for rail_type in ("input", "output", "retrieval"):
         section = rails.get(rail_type, {})
@@ -188,6 +208,11 @@ def _patch_openai_models(
     model_name: str,
     api_key: str,
     max_tokens: int | None = None,
+    *,
+    llama_guard_base_url: str = "",
+    llama_guard_model: str = "",
+    llama_guard_api_key: str = "",
+    strip_self_check: bool = False,
 ) -> None:
     if max_tokens is None:
         max_tokens = int(os.getenv("CAIIS_MAX_TOKENS", "1024"))
@@ -197,6 +222,15 @@ def _patch_openai_models(
         if model.get("engine") != "openai":
             continue
         params = model.setdefault("parameters", {})
+        model_type = model.get("type", "")
+        if model_type == "safety_check" and llama_guard_base_url:
+            params["base_url"] = llama_guard_base_url
+            if llama_guard_api_key:
+                params["api_key"] = llama_guard_api_key
+            if llama_guard_model:
+                model["model"] = llama_guard_model
+            params["max_tokens"] = 16
+            continue
         if base_url:
             params["base_url"] = base_url
         if api_key:
@@ -204,6 +238,9 @@ def _patch_openai_models(
         if model_name:
             model["model"] = model_name
         params["max_tokens"] = max_tokens
+
+    if strip_self_check:
+        merged["rails"] = _strip_self_check_flows(merged.get("rails", {}))
 
     with config_path.open("w") as f:
         yaml.dump(merged, f, default_flow_style=False)
@@ -228,8 +265,19 @@ def prepare_server_config_from_env(source_dir: Path | str) -> Path:
     base_url = os.environ.get("MAIN_MODEL_BASE_URL", "").strip()
     model_name = os.environ.get("MAIN_MODEL_NAME", "").strip()
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    safety_mode = os.environ.get("DEFAULT_SAFETY_MODE", os.environ.get("SAFETY_MODE", "")).strip().lower()
+    llama_guard_base_url = os.environ.get("LLAMA_GUARD_BASE_URL", "").strip()
+    llama_guard_model = os.environ.get("LLAMA_GUARD_MODEL", "").strip()
+    llama_guard_api_key = os.environ.get("CDP_TOKEN", api_key).strip()
+    strip_self_check = safety_mode == "llama_guard"
 
-    if not base_url and not model_name and not api_key:
+    if (
+        not base_url
+        and not model_name
+        and not api_key
+        and not strip_self_check
+        and not llama_guard_base_url
+    ):
         return rails_root
 
     tmp_root = Path(tempfile.mkdtemp(prefix="nemo_guardrails_server_"))
@@ -237,5 +285,14 @@ def prepare_server_config_from_env(source_dir: Path | str) -> Path:
     shutil.copytree(config_subdir, dest_subdir, dirs_exist_ok=True)
     config_path = dest_subdir / "config.yml"
 
-    _patch_openai_models(config_path, base_url, model_name, api_key)
+    _patch_openai_models(
+        config_path,
+        base_url,
+        model_name,
+        api_key,
+        llama_guard_base_url=llama_guard_base_url if strip_self_check else "",
+        llama_guard_model=llama_guard_model,
+        llama_guard_api_key=llama_guard_api_key,
+        strip_self_check=strip_self_check,
+    )
     return tmp_root
