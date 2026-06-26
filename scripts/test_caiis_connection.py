@@ -73,7 +73,7 @@ def main() -> int:
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": "Reply with exactly: CAIIS OK"}],
-            max_tokens=16,
+            max_tokens=int(os.getenv("CAIIS_MAX_TOKENS", "1024")),
             temperature=0,
         )
     except Exception as exc:

@@ -60,7 +60,10 @@ def _build_models_config(llm_config: LLMConfig, safety: SafetyModelConfig) -> li
         "type": "main",
         "engine": "openai",
         "model": llm_config.model,
-        "parameters": {"temperature": llm_config.temperature},
+        "parameters": {
+            "temperature": llm_config.temperature,
+            "max_tokens": llm_config.max_tokens,
+        },
     }
     if llm_config.base_url:
         main_model["parameters"]["base_url"] = llm_config.base_url
@@ -79,6 +82,7 @@ def _build_models_config(llm_config: LLMConfig, safety: SafetyModelConfig) -> li
         if safety.nim_api_key:
             safety_model["parameters"]["api_key"] = safety.nim_api_key
     else:
+        safety_model["parameters"]["max_tokens"] = llm_config.max_tokens
         if llm_config.base_url:
             safety_model["parameters"]["base_url"] = llm_config.base_url
         if llm_config.api_key:
@@ -178,7 +182,15 @@ def set_server_env(llm_config: LLMConfig) -> dict[str, str]:
     return env
 
 
-def _patch_openai_models(config_path: Path, base_url: str, model_name: str, api_key: str) -> None:
+def _patch_openai_models(
+    config_path: Path,
+    base_url: str,
+    model_name: str,
+    api_key: str,
+    max_tokens: int | None = None,
+) -> None:
+    if max_tokens is None:
+        max_tokens = int(os.getenv("CAIIS_MAX_TOKENS", "1024"))
     merged = _load_yaml(config_path)
     models = merged.get("models") or []
     for model in models:
@@ -191,6 +203,7 @@ def _patch_openai_models(config_path: Path, base_url: str, model_name: str, api_
             params["api_key"] = api_key
         if model_name:
             model["model"] = model_name
+        params["max_tokens"] = max_tokens
 
     with config_path.open("w") as f:
         yaml.dump(merged, f, default_flow_style=False)

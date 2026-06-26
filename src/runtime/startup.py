@@ -120,9 +120,11 @@ def configure_guardrails_llm_env() -> None:
     os.environ.setdefault("MAIN_MODEL_ENGINE", "openai")
 
     if os.environ.get("CAIIS_BASE_URL"):
+        from src.llm.provider import CAIIS_DEFAULT_MODEL
+
         os.environ.setdefault(
             "MAIN_MODEL_NAME",
-            os.environ.get("CAIIS_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1"),
+            os.environ.get("CAIIS_MODEL", CAIIS_DEFAULT_MODEL),
         )
         os.environ.setdefault("MAIN_MODEL_BASE_URL", os.environ["CAIIS_BASE_URL"])
     else:

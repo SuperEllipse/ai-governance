@@ -15,8 +15,16 @@ ProviderName = Literal["openai", "caiis"]
 CAIIS_DEFAULT_BASE_URL = (
     "https://ai-inference.YOUR-DOMAIN/namespaces/serving-default/endpoints/YOUR-MODEL/v1"
 )
-CAIIS_DEFAULT_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1"
+CAIIS_DEFAULT_MODEL = "nvidia/nemotron-3-nano"
+CAIIS_DEFAULT_MAX_TOKENS = 1024
+OPENAI_DEFAULT_MAX_TOKENS = 512
 CAIIS_PLACEHOLDER_MARKERS = ("YOUR-DOMAIN", "YOUR-MODEL")
+
+
+def _default_max_tokens(provider: ProviderName) -> int:
+    if provider == "caiis":
+        return int(os.getenv("CAIIS_MAX_TOKENS", str(CAIIS_DEFAULT_MAX_TOKENS)))
+    return int(os.getenv("OPENAI_MAX_TOKENS", str(OPENAI_DEFAULT_MAX_TOKENS)))
 
 
 def _load_project_env() -> None:
@@ -41,6 +49,7 @@ class LLMConfig:
     base_url: str = "https://api.openai.com/v1"
     api_key: str = ""
     temperature: float = 0.2
+    max_tokens: int = OPENAI_DEFAULT_MAX_TOKENS
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -49,6 +58,7 @@ class LLMConfig:
             "base_url": self.base_url,
             "api_key": self.api_key,
             "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
         }
 
 
@@ -71,15 +81,20 @@ def is_caiis_configured() -> bool:
 
 
 def detect_default_provider() -> ProviderName:
-    """Pick the default sidebar provider (OpenAI unless DEFAULT_LLM_PROVIDER is set)."""
+    """Pick the default sidebar provider.
+
+    Uses DEFAULT_LLM_PROVIDER when set; otherwise CAIIS when configured, else OpenAI.
+    """
     override = os.getenv("DEFAULT_LLM_PROVIDER", "").strip().lower()
     if override in ("openai", "caiis"):
         return override  # type: ignore[return-value]
+    if is_caiis_configured():
+        return "caiis"
     return "openai"
 
 
 def default_llm_config() -> LLMConfig:
-    """Default LLM config — OpenAI unless DEFAULT_LLM_PROVIDER=caiis."""
+    """Default LLM config — CAIIS when configured or DEFAULT_LLM_PROVIDER=caiis."""
     if detect_default_provider() == "caiis":
         return default_caiis_config()
     return default_openai_config()
@@ -91,6 +106,7 @@ def default_openai_config() -> LLMConfig:
         model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         api_key=os.getenv("OPENAI_API_KEY", ""),
+        max_tokens=_default_max_tokens("openai"),
     )
 
 
@@ -100,6 +116,7 @@ def default_caiis_config() -> LLMConfig:
         model=os.getenv("CAIIS_MODEL", CAIIS_DEFAULT_MODEL),
         base_url=os.getenv("CAIIS_BASE_URL", CAIIS_DEFAULT_BASE_URL),
         api_key=_read_cdp_token(),
+        max_tokens=_default_max_tokens("caiis"),
     )
 
 
@@ -141,6 +158,7 @@ def create_crewai_llm(config: LLMConfig | None = None) -> LLM:
     kwargs: dict[str, Any] = {
         "model": cfg.model,
         "temperature": cfg.temperature,
+        "max_tokens": cfg.max_tokens,
     }
     api_key = cfg.api_key or (
         _read_cdp_token() if cfg.provider == "caiis" else os.getenv("OPENAI_API_KEY", "")

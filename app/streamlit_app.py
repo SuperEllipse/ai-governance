@@ -164,8 +164,14 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
         provider_options,
         index=provider_options.index(default_provider),
         format_func=lambda x: "OpenAI" if x == "openai" else "Cloudera AI Inference",
-        help="Defaults to OpenAI. Set DEFAULT_LLM_PROVIDER=caiis in .env to default to CAIIS.",
+        help="Defaults to CAIIS when CAIIS_BASE_URL is set, or set DEFAULT_LLM_PROVIDER in .env.",
     )
+
+    if provider == "caiis":
+        st.sidebar.caption(
+            f"Reasoning models (e.g. nemotron-3-nano) need max_tokens ≥ 1024 "
+            f"(CAIIS_MAX_TOKENS={default_caiis_config().max_tokens})."
+        )
 
     if provider == "openai" and is_caiis_configured():
         st.sidebar.warning(

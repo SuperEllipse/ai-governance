@@ -11,7 +11,7 @@ A Cloudera AI Workbench demo showcasing **NVIDIA NeMo Guardrails** with a **Crew
 - **CrewAI multi-agent workflow**: `CustomerServiceAgent` + `CreditMortgageAgent` with distinct CIS lookup tools
 - **Modular NeMo policies**: PII, jailbreak, topic control, toxicity/bias (checkbox toggles in UI)
 - **Three guardrails modes**: unguarded, embedded `LLMRails`, centralized server (`:8000` / `:8001` on CDSW) — **centralized server recommended**
-- **LLM providers**: OpenAI `gpt-4o-mini` or **Cloudera AI Inference Service (CAIIS)**
+- **LLM providers**: OpenAI `gpt-4o-mini` or **Cloudera AI Inference Service (CAIIS)** with `nvidia/nemotron-3-nano` by default
 - **Safety models**: LLM-as-judge (`self_check`) default, optional NVIDIA NIM toggle
 - **Streamlit UI** (default CDSW app port **8090** on `127.0.0.1`, or auto-fallback): Chat Compare, Batch Dashboard, Architecture tabs
 - **Violation logging**: SQLite store with drill-down in dashboard
@@ -43,7 +43,7 @@ bash scripts/start_demo.sh
 
 Open the printed URL. In CDSW sessions, open the **Application** on port **8090** (Streamlit binds to `127.0.0.1:8090` because the pod IP already holds that port for the proxy).
 
-The Streamlit sidebar defaults to **OpenAI** (`gpt-4o-mini`) for remote workbench testing. Select **Cloudera AI Inference** in the sidebar to use CAIIS, or set `DEFAULT_LLM_PROVIDER=caiis` in `.env`. Guardrails mode defaults to **Centralized Server** — set **Guardrails Server URL** to the port printed at startup (often `http://127.0.0.1:8001` on CDSW).
+The Streamlit sidebar defaults to **Cloudera AI Inference** when `CAIIS_BASE_URL` is set in `.env` (or set `DEFAULT_LLM_PROVIDER=caiis`). Otherwise it defaults to **OpenAI** (`gpt-4o-mini`). Guardrails mode defaults to **Centralized Server** — set **Guardrails Server URL** to the port printed at startup (often `http://127.0.0.1:8001` on CDSW).
 
 ### Using Cloudera AI Inference (CAIIS)
 
@@ -53,7 +53,8 @@ The Streamlit sidebar defaults to **OpenAI** (`gpt-4o-mini`) for remote workbenc
 cp .env.caiis.example .env
 # Edit .env:
 #   CAIIS_BASE_URL=https://ai-inference.YOUR-DOMAIN/namespaces/serving-default/endpoints/YOUR-MODEL/v1
-#   CAIIS_MODEL=nvidia/llama-3.3-nemotron-super-49b-v1
+#   CAIIS_MODEL=nvidia/nemotron-3-nano
+#   CAIIS_MAX_TOKENS=1024   # required for reasoning models (nemotron-3-nano) to populate content
 #   CDP_TOKEN=your-cdp-bearer-token   # or rely on /tmp/jwt in CDSW sessions
 bash scripts/start_guardrails_server.sh   # restart server with CAIIS
 bash scripts/start_demo.sh
@@ -113,9 +114,10 @@ ai-governance/
 | `OPENAI_MODEL` | OpenAI model name (default: `gpt-4o-mini`) |
 | `OPENAI_BASE_URL` | OpenAI-compatible base URL (default: `https://api.openai.com/v1`) |
 | `CAIIS_BASE_URL` | Cloudera AI Inference endpoint `/v1` URL |
-| `CAIIS_MODEL` | Model deployed on CAIIS (e.g. `nvidia/llama-3.3-nemotron-super-49b-v1`) |
+| `CAIIS_MODEL` | Model deployed on CAIIS (default: `nvidia/nemotron-3-nano`) |
+| `CAIIS_MAX_TOKENS` | Max completion tokens for CAIIS (default: `1024`; reasoning models need ≥1024) |
 | `CDP_TOKEN` | CDP auth token for CAIIS (or read from `/tmp/jwt` in CDSW) |
-| `DEFAULT_LLM_PROVIDER` | Optional sidebar default: `openai` (default) or `caiis` |
+| `DEFAULT_LLM_PROVIDER` | Sidebar default: `caiis` when CAIIS is configured, else `openai` |
 | `NVIDIA_API_KEY` | For NIM safety models (optional; default is `self_check`) |
 | `GUARDRAILS_SERVER_URL` | Centralized server URL (default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
 | `GUARDRAILS_PORT` | **Session/bash only:** preferred bind port for `start_guardrails_server.sh` (example: `8001`; script may pick 8000→8001→8080). **Ignored in CAI Application mode.** |
@@ -464,13 +466,14 @@ Dataset breakdown (100 queries): 40 happy path, 15 PII, 15 jailbreak, 15 topic, 
 cp .env.caiis.example .env
 # Edit .env with your values:
 export CAIIS_BASE_URL="https://ai-inference.YOUR-DOMAIN/namespaces/serving-default/endpoints/YOUR-MODEL/v1"
-export CAIIS_MODEL="nvidia/llama-3.3-nemotron-super-49b-v1"
+export CAIIS_MODEL="nvidia/nemotron-3-nano"
+export CAIIS_MAX_TOKENS="1024"
 export CDP_TOKEN="your-cdp-bearer-token"   # or /tmp/jwt in CDSW sessions
 ```
 
 Copy `.env.openai.example` or `.env.caiis.example` to `.env` and adjust values. In CDSW sessions, `scripts/common_env.sh` loads `/tmp/jwt` automatically when `CDP_TOKEN` is unset.
 
-**Switching in the UI:** The sidebar defaults to **OpenAI**. Use the **LLM Provider** dropdown to switch to **Cloudera AI Inference**; Base URL and Model fields update to each provider's defaults. Set `DEFAULT_LLM_PROVIDER=caiis` in `.env` to default the sidebar to CAIIS.
+**Switching in the UI:** When `CAIIS_BASE_URL` is set, the sidebar defaults to **Cloudera AI Inference** with `nvidia/nemotron-3-nano`. Use the **LLM Provider** dropdown to switch providers; Base URL and Model fields update to each provider's defaults.
 
 ---
 
@@ -511,7 +514,9 @@ Copy `.env.openai.example` or `.env.caiis.example` to `.env` and adjust values. 
 
 ## Inference Service (CAIIS) Configuration
 
-Recommended setup: **CAIIS** LLM + **Centralized Server** guardrails.
+Recommended setup: **CAIIS** with `nvidia/nemotron-3-nano` + **Centralized Server** guardrails.
+
+Reasoning models like **nemotron-3-nano** require `CAIIS_MAX_TOKENS=1024` (or higher) so the OpenAI-compatible response includes a populated `content` field; lower values may return empty content while reasoning tokens are consumed internally.
 
 ```bash
 git clone https://github.com/SuperEllipse/ai-governance.git
@@ -533,7 +538,7 @@ bash scripts/start_demo.sh
 - **CDSW ports**: `8090` (app), `8080` (public), `8100` (read-only) are reserved on the pod IP; Streamlit listens on **`127.0.0.1:8090`** so the Workbench Application proxy can reach it.
 - **Guardrails server**: run in a separate terminal; **`pick_guardrails_bind`** tries **`127.0.0.1:8000`**, then **8001**, then 8080 — check startup output for the actual port
 - **CDP token**: automatically read from `/tmp/jwt` in CDSW sessions (via `scripts/common_env.sh`)
-- **CAIIS**: set `CAIIS_BASE_URL` and `CAIIS_MODEL` in `.env`, then select **Cloudera AI Inference** in the sidebar (or use OpenAI via `.env.openai.example`)
+- **CAIIS**: set `CAIIS_BASE_URL`, `CAIIS_MODEL`, and `CAIIS_MAX_TOKENS=1024` in `.env` — sidebar auto-selects **Cloudera AI Inference** (or use OpenAI via `.env.openai.example`)
 
 For port 8000 exposure in Kubernetes:
 ```bash
@@ -577,12 +582,11 @@ CrewAI uses an OpenAI-compatible HTTP client for **both** OpenAI and CAIIS, so c
 
 **Common causes:**
 
-1. **Wrong sidebar provider** — sidebar still on **OpenAI** while you intend to use CAIIS. Select **Cloudera AI Inference** in the sidebar.
+1. **Wrong sidebar provider** — sidebar on **OpenAI** while CAIIS is configured. Select **Cloudera AI Inference**, or set `DEFAULT_LLM_PROVIDER=caiis` in `.env`.
 2. **`.env` not loaded** — start the demo with `bash scripts/start_demo.sh` (loads `.env` via `scripts/common_env.sh`), not bare `streamlit run`.
 3. **Missing auth** — set `CDP_TOKEN` in `.env` or rely on `/tmp/jwt` in CDSW sessions.
 4. **Network path differs from terminal** — `curl` from a session terminal may succeed while the Streamlit app or a CDSW job cannot reach CAIIS. Run `python scripts/test_caiis_connection.py` from the same runtime context as the app.
-
-Force CAIIS as sidebar default: `DEFAULT_LLM_PROVIDER=caiis` in `.env`.
+5. **Empty model responses** — reasoning models like `nvidia/nemotron-3-nano` need `CAIIS_MAX_TOKENS=1024` or higher.
 
 ### `RuntimeError` / sqlite3 version check when starting guardrails or Streamlit
 

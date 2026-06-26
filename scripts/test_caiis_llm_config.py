@@ -29,14 +29,19 @@ def _assert(condition: bool, message: str) -> None:
 def test_detect_default_provider() -> None:
     env = {
         "CAIIS_BASE_URL": "https://caiis.example.com/namespaces/serving-default/endpoints/demo/v1",
-        "CAIIS_MODEL": "nvidia/llama-3.3-nemotron-super-49b-v1",
+        "CAIIS_MODEL": "nvidia/nemotron-3-nano",
         "CDP_TOKEN": "test-cdp-token",
     }
     with patch.dict(os.environ, env, clear=True):
         _assert(is_caiis_configured(), "CAIIS should be configured with real base URL")
         _assert(
+            detect_default_provider() == "caiis",
+            "default provider should be caiis when CAIIS_BASE_URL is configured",
+        )
+    with patch.dict(os.environ, {**env, "DEFAULT_LLM_PROVIDER": "openai"}, clear=True):
+        _assert(
             detect_default_provider() == "openai",
-            "default provider should be openai unless DEFAULT_LLM_PROVIDER is set",
+            "DEFAULT_LLM_PROVIDER=openai should override auto-detect",
         )
     with patch.dict(os.environ, {**env, "DEFAULT_LLM_PROVIDER": "caiis"}, clear=True):
         _assert(
@@ -48,7 +53,8 @@ def test_detect_default_provider() -> None:
 def test_get_llm_config_caiis() -> None:
     env = {
         "CAIIS_BASE_URL": "https://caiis.example.com/v1",
-        "CAIIS_MODEL": "nvidia/llama-3.3-nemotron-super-49b-v1",
+        "CAIIS_MODEL": "nvidia/nemotron-3-nano",
+        "CAIIS_MAX_TOKENS": "1024",
         "CDP_TOKEN": "test-cdp-token",
     }
     with patch.dict(os.environ, env, clear=True):
@@ -60,16 +66,18 @@ def test_get_llm_config_caiis() -> None:
             cfg.model == env["CAIIS_MODEL"],
             "model should match CAIIS_MODEL",
         )
+        _assert(cfg.max_tokens == 1024, "max_tokens should default from CAIIS_MAX_TOKENS")
 
 
 def test_create_crewai_llm_routes_openai_client() -> None:
     cfg = default_caiis_config()
     cfg = type(cfg)(
         provider="caiis",
-        model="nvidia/llama-3.3-nemotron-super-49b-v1",
+        model="nvidia/nemotron-3-nano",
         base_url="https://caiis.example.com/v1",
         api_key="test-cdp-token",
         temperature=cfg.temperature,
+        max_tokens=1024,
     )
     llm = create_crewai_llm(cfg)
     _assert(
@@ -83,12 +91,13 @@ def test_create_crewai_llm_routes_openai_client() -> None:
     )
     _assert(getattr(llm, "api_key", None) == "test-cdp-token", "api_key should be CDP token")
     _assert(
-        getattr(llm, "model", None) == "nvidia/llama-3.3-nemotron-super-49b-v1",
+        getattr(llm, "model", None) == "nvidia/nemotron-3-nano",
         "model name should be preserved for CAIIS",
     )
+    _assert(getattr(llm, "max_tokens", None) == 1024, "max_tokens should be passed to CrewAI LLM")
 
 
-def test_default_llm_config_prefers_openai() -> None:
+def test_default_llm_config_prefers_caiis_when_configured() -> None:
     env = {
         "CAIIS_BASE_URL": "https://caiis.example.com/v1",
         "OPENAI_API_KEY": "sk-openai-key",
@@ -96,16 +105,23 @@ def test_default_llm_config_prefers_openai() -> None:
     }
     with patch.dict(os.environ, env, clear=True):
         cfg = default_llm_config()
-        _assert(cfg.provider == "openai", "default_llm_config should default to openai")
-        _assert(cfg.model == "gpt-4o-mini", "default should use gpt-4o-mini")
-
-    with patch.dict(os.environ, {**env, "DEFAULT_LLM_PROVIDER": "caiis"}, clear=True):
-        cfg = default_llm_config()
         _assert(
             cfg.provider == "caiis",
-            "default_llm_config should pick caiis when DEFAULT_LLM_PROVIDER=caiis",
+            "default_llm_config should pick caiis when CAIIS_BASE_URL is set",
         )
         _assert(cfg.base_url == env["CAIIS_BASE_URL"], "default should use CAIIS base URL")
+
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-openai-key"}, clear=True):
+        cfg = default_llm_config()
+        _assert(cfg.provider == "openai", "default_llm_config should use openai without CAIIS")
+        _assert(cfg.model == "gpt-4o-mini", "default should use gpt-4o-mini")
+
+    with patch.dict(os.environ, {**env, "DEFAULT_LLM_PROVIDER": "openai"}, clear=True):
+        cfg = default_llm_config()
+        _assert(
+            cfg.provider == "openai",
+            "DEFAULT_LLM_PROVIDER=openai should override CAIIS auto-detect",
+        )
 
 
 def test_guardrails_server_config_patch() -> None:
@@ -113,8 +129,9 @@ def test_guardrails_server_config_patch() -> None:
 
     env = {
         "MAIN_MODEL_BASE_URL": "https://caiis.example.com/v1",
-        "MAIN_MODEL_NAME": "nvidia/llama-3.3-nemotron-super-49b-v1",
+        "MAIN_MODEL_NAME": "nvidia/nemotron-3-nano",
         "OPENAI_API_KEY": "test-cdp-token",
+        "CAIIS_MAX_TOKENS": "1024",
     }
     with patch.dict(os.environ, env, clear=True):
         runtime = prepare_server_config_from_env(ROOT / "guardrails" / "base")
@@ -136,6 +153,10 @@ def test_guardrails_server_config_patch() -> None:
                 model.get("model") == env["MAIN_MODEL_NAME"],
                 f"{model['type']} model name should be patched",
             )
+            _assert(
+                params.get("max_tokens") == 1024,
+                f"{model['type']} model should include max_tokens from CAIIS_MAX_TOKENS",
+            )
 
 
 def main() -> int:
@@ -143,7 +164,7 @@ def main() -> int:
         test_detect_default_provider,
         test_get_llm_config_caiis,
         test_create_crewai_llm_routes_openai_client,
-        test_default_llm_config_prefers_openai,
+        test_default_llm_config_prefers_caiis_when_configured,
         test_guardrails_server_config_patch,
     ]
     for test in tests:
