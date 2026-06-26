@@ -11,6 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.runtime.sqlite_compat import apply_sqlite3_compat
+
+apply_sqlite3_compat()
+
 from src.llm.provider import (
     create_crewai_llm,
     default_caiis_config,
