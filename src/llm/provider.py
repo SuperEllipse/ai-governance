@@ -8,12 +8,16 @@ from pathlib import Path
 from typing import Any, Literal
 
 from src.llm.caiis_url import (
+    CAIIS_DEFAULT_MODEL,
     LLAMA_GUARD_DEFAULT_ENDPOINT,
+    LLAMA_GUARD_DEFAULT_MODEL,
     build_caiis_base_url,
     is_caiis_url_configured,
     is_llama_guard_url_configured,
     resolve_caiis_base_url,
+    resolve_caiis_model,
     resolve_llama_guard_base_url,
+    resolve_llama_guard_model,
 )
 
 
@@ -24,7 +28,6 @@ CAIIS_DEFAULT_BASE_URL = build_caiis_base_url(
     "YOUR-MODEL",
     api_path="",
 )
-CAIIS_DEFAULT_MODEL = "nvidia/nemotron-3-nano"
 CAIIS_DEFAULT_MAX_TOKENS = 1024
 OPENAI_DEFAULT_MAX_TOKENS = 512
 
@@ -32,9 +35,6 @@ LLAMA_GUARD_DEFAULT_BASE_URL = build_caiis_base_url(
     "ai-inference.YOUR-DOMAIN",
     LLAMA_GUARD_DEFAULT_ENDPOINT,
 )
-LLAMA_GUARD_DEFAULT_MODEL = "meta-llama/Llama-Guard-3-8B"
-
-
 def _default_max_tokens(provider: ProviderName) -> int:
     if provider == "caiis":
         return int(os.getenv("CAIIS_MAX_TOKENS", str(CAIIS_DEFAULT_MAX_TOKENS)))
@@ -125,7 +125,7 @@ def default_caiis_config() -> LLMConfig:
     resolved_url = resolve_caiis_base_url()
     return LLMConfig(
         provider="caiis",
-        model=os.getenv("CAIIS_MODEL", CAIIS_DEFAULT_MODEL),
+        model=resolve_caiis_model(),
         base_url=resolved_url or CAIIS_DEFAULT_BASE_URL,
         api_key=_read_cdp_token(),
         max_tokens=_default_max_tokens("caiis"),
@@ -223,9 +223,7 @@ class SafetyModelConfig:
             "NIM_BASE_URL", "https://integrate.api.nvidia.com/v1"
         )
     )
-    llama_guard_model: str = field(
-        default_factory=lambda: os.getenv("LLAMA_GUARD_MODEL", LLAMA_GUARD_DEFAULT_MODEL)
-    )
+    llama_guard_model: str = field(default_factory=resolve_llama_guard_model)
     llama_guard_base_url: str = field(
         default_factory=lambda: resolve_llama_guard_base_url()
         or LLAMA_GUARD_DEFAULT_BASE_URL

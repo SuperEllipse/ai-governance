@@ -115,8 +115,8 @@ def _read_cdp_token_from_jwt() -> str | None:
 
 def configure_guardrails_llm_env() -> None:
     """Set MAIN_MODEL_* and OPENAI_API_KEY for the NeMo guardrails server."""
-    from src.llm.caiis_url import resolve_caiis_base_url
-    from src.llm.provider import CAIIS_DEFAULT_MODEL, is_caiis_configured
+    from src.llm.caiis_url import resolve_caiis_base_url, resolve_caiis_model
+    from src.llm.provider import is_caiis_configured
 
     os.environ.setdefault("OPENAI_MODEL", "gpt-4o-mini")
     os.environ.setdefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
@@ -124,10 +124,7 @@ def configure_guardrails_llm_env() -> None:
 
     caiis_url = resolve_caiis_base_url()
     if caiis_url and is_caiis_configured():
-        os.environ.setdefault(
-            "MAIN_MODEL_NAME",
-            os.environ.get("CAIIS_MODEL", CAIIS_DEFAULT_MODEL),
-        )
+        os.environ.setdefault("MAIN_MODEL_NAME", resolve_caiis_model())
         os.environ.setdefault("MAIN_MODEL_BASE_URL", caiis_url)
     else:
         os.environ.setdefault("MAIN_MODEL_NAME", os.environ["OPENAI_MODEL"])

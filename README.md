@@ -70,13 +70,17 @@ The [CAII Application deploy UI](https://docs.cloudera.com/machine-learning/clou
 | `CAIIS_ENDPOINT` | `mpark-nemotron` | Deployed endpoint name (e.g. `hermes-3-llama-3-1-8b`, `llama-guard-3`) |
 | `CAIIS_NAMESPACE` | `serving-default` | Optional; default `serving-default` |
 | `CAIIS_API_PATH` | `openai` | Optional; default `openai` → `/openai/v1` suffix. Set empty to omit (legacy `/v1` only) |
-| `CAIIS_MODEL` | `nvidia/nemotron-3-nano` | Model id for the OpenAI-compatible API |
+| `CAIIS_MODEL` | `nvidia/nemotron-3-nano` | Full model id (local `.env` / CDSW; contains `/`) |
+| `CAIIS_MODEL_ORG` | `nvidia` | CAII Application: model org when `CAIIS_MODEL` is not set |
+| `CAIIS_MODEL_NAME` | `nemotron-3-nano` | CAII Application: model name; resolved as `{ORG}/{NAME}` |
 | `CAIIS_MAX_TOKENS` | `1024` | Required for reasoning models |
 | `CDP_TOKEN` | *(your token)* | Bearer auth for CAIIS |
 
 The app builds: `https://{CAIIS_HOST}/namespaces/{CAIIS_NAMESPACE}/endpoints/{CAIIS_ENDPOINT}/{CAIIS_API_PATH}/v1`
 
-For **Llama Guard 3**, use `LLAMA_GUARD_HOST` + `LLAMA_GUARD_ENDPOINT` (defaults to `llama-guard-3`) or the full `LLAMA_GUARD_BASE_URL` in local `.env`.
+For **Llama Guard 3**, use `LLAMA_GUARD_HOST` + `LLAMA_GUARD_ENDPOINT` (defaults to `llama-guard-3`) or the full `LLAMA_GUARD_BASE_URL` in local `.env`. Model ids with `/` use `LLAMA_GUARD_MODEL_ORG` + `LLAMA_GUARD_MODEL_NAME` in the Application UI (or full `LLAMA_GUARD_MODEL` locally).
+
+> **Model ids:** `CAIIS_MODEL` / `LLAMA_GUARD_MODEL` with `/` work in local `.env` and CDSW. For CAII Application deploy, split into `*_MODEL_ORG` and `*_MODEL_NAME`; full `*_MODEL` takes precedence when set.
 
 For **cross-app guardrails** (Streamlit → guardrails server), use `GUARDRAILS_HOST=nemo-guardrails.YOUR-CAI-DOMAIN` in the Application UI, or the full `GUARDRAILS_SERVER_URL` in local `.env`.
 
@@ -91,7 +95,7 @@ Terminal `curl` succeeding does **not** guarantee the Streamlit/CrewAI process c
 Run a live inference check as a CDSW job or from the session terminal:
 
 ```bash
-# Ensure .env has CAIIS configured (CAIIS_BASE_URL or CAIIS_HOST+ENDPOINT), CAIIS_MODEL, and CDP_TOKEN (or /tmp/jwt in CDSW)
+# Ensure .env has CAIIS configured (CAIIS_BASE_URL or CAIIS_HOST+ENDPOINT), CAIIS_MODEL (or ORG+NAME), and CDP_TOKEN (or /tmp/jwt in CDSW)
 python scripts/test_caiis_connection.py
 ```
 
@@ -140,7 +144,9 @@ ai-governance/
 | `CAIIS_ENDPOINT` | CAII Application: endpoint name (e.g. `mpark-nemotron`) |
 | `CAIIS_NAMESPACE` | CAII Application: namespace (default: `serving-default`) |
 | `CAIIS_API_PATH` | CAII Application: API path segment before `/v1` (default: `openai`) |
-| `CAIIS_MODEL` | Model deployed on CAIIS (default: `nvidia/nemotron-3-nano`) |
+| `CAIIS_MODEL` | Full model id with `/` (local `.env` / CDSW; default: `nvidia/nemotron-3-nano`) |
+| `CAIIS_MODEL_ORG` | CAII Application: model org (e.g. `nvidia`, `meta-llama`) |
+| `CAIIS_MODEL_NAME` | CAII Application: model name; resolved as `{ORG}/{NAME}` |
 | `CAIIS_MAX_TOKENS` | Max completion tokens for CAIIS (default: `1024`; reasoning models need ≥1024) |
 | `CDP_TOKEN` | CDP auth token for CAIIS (or read from `/tmp/jwt` in CDSW) |
 | `LLAMA_GUARD_BASE_URL` | Full Llama Guard `/v1` URL (local `.env`) |
@@ -148,7 +154,9 @@ ai-governance/
 | `LLAMA_GUARD_ENDPOINT` | CAII Application: Llama Guard endpoint (default: `llama-guard-3`) |
 | `LLAMA_GUARD_NAMESPACE` | CAII Application: namespace (falls back to `CAIIS_NAMESPACE`) |
 | `LLAMA_GUARD_API_PATH` | CAII Application: API path (default: `openai`) |
-| `LLAMA_GUARD_MODEL` | Llama Guard model id (default: `meta-llama/Llama-Guard-3-8B`) |
+| `LLAMA_GUARD_MODEL` | Full Llama Guard model id (local `.env`; default: `meta-llama/Llama-Guard-3-8B`) |
+| `LLAMA_GUARD_MODEL_ORG` | CAII Application: Llama Guard org (e.g. `meta-llama`) |
+| `LLAMA_GUARD_MODEL_NAME` | CAII Application: Llama Guard name; resolved as `{ORG}/{NAME}` |
 | `DEFAULT_LLM_PROVIDER` | Sidebar default: `caiis` when CAIIS is configured, else `openai` |
 | `NVIDIA_API_KEY` | For NIM safety models (optional; default is `self_check`) |
 | `GUARDRAILS_SERVER_URL` | Centralized server URL (local `.env`; default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
@@ -189,7 +197,7 @@ Deploy this demo as **two separate long-running Applications** in Cloudera AI (p
 
 **Environment variables** (set in the Application UI or project `.env`):
 
-- `CAIIS_BASE_URL` or `CAIIS_HOST` + `CAIIS_ENDPOINT`, `CAIIS_MODEL`, `CDP_TOKEN` — when using Cloudera AI Inference
+- `CAIIS_BASE_URL` or `CAIIS_HOST` + `CAIIS_ENDPOINT`, `CAIIS_MODEL` (or `CAIIS_MODEL_ORG` + `CAIIS_MODEL_NAME`), `CDP_TOKEN` — when using Cloudera AI Inference
 - `OPENAI_API_KEY`, `OPENAI_MODEL` — when using OpenAI
 - `GUARDRAILS_CONFIG` — optional; defaults to `guardrails/`
 - `CAI_BIND_PORT_KEY` — optional; set to `CDSW_READONLY_PORT` to expose guardrails on the read-only port instead of `CDSW_APP_PORT`
@@ -511,8 +519,14 @@ CAIIS_HOST=ml-YOUR-CLUSTER-ID.YOUR-CAI-DOMAIN
 CAIIS_ENDPOINT=mpark-nemotron
 CAIIS_NAMESPACE=serving-default
 CAIIS_API_PATH=openai
-CAIIS_MODEL=nvidia/nemotron-3-nano
+CAIIS_MODEL_ORG=nvidia
+CAIIS_MODEL_NAME=nemotron-3-nano
 CAIIS_MAX_TOKENS=1024
+# Llama Guard (optional):
+# LLAMA_GUARD_HOST=ml-YOUR-CLUSTER-ID.YOUR-CAI-DOMAIN
+# LLAMA_GUARD_ENDPOINT=llama-guard-3
+# LLAMA_GUARD_MODEL_ORG=meta-llama
+# LLAMA_GUARD_MODEL_NAME=Llama-Guard-3-8B
 ```
 
 Copy `.env.openai.example` or `.env.caiis.example` to `.env` and adjust values. In CDSW sessions, `scripts/common_env.sh` loads `/tmp/jwt` automatically when `CDP_TOKEN` is unset.

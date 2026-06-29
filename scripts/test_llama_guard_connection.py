@@ -20,9 +20,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.guardrails.llama_guard import check_llama_guard, parse_llama_guard_response
-from src.llm.caiis_url import LLAMA_GUARD_PLACEHOLDER_MARKERS, resolve_llama_guard_base_url
+from src.llm.caiis_url import (
+    LLAMA_GUARD_PLACEHOLDER_MARKERS,
+    resolve_llama_guard_base_url,
+    resolve_llama_guard_model,
+)
 from src.llm.provider import (
-    LLAMA_GUARD_DEFAULT_MODEL,
     SafetyModelConfig,
     _read_cdp_token,
     is_llama_guard_configured,
@@ -51,7 +54,7 @@ def main() -> int:
     _load_env()
 
     base_url = resolve_llama_guard_base_url()
-    model = os.getenv("LLAMA_GUARD_MODEL", LLAMA_GUARD_DEFAULT_MODEL).strip()
+    model = resolve_llama_guard_model()
     token = os.getenv("CDP_TOKEN", "").strip() or _read_cdp_token()
 
     print("Llama Guard connectivity test")

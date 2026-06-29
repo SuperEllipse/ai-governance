@@ -19,6 +19,8 @@ from src.llm.caiis_url import (
     build_caiis_base_url,
     is_caiis_url_configured,
     resolve_caiis_base_url,
+    resolve_caiis_model,
+    resolve_llama_guard_model,
 )
 from src.llm.provider import (
     create_crewai_llm,
@@ -33,6 +35,71 @@ from src.llm.provider import (
 def _assert(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def test_resolve_caiis_model_from_org_and_name() -> None:
+    env = {
+        "CAIIS_MODEL_ORG": "meta-llama",
+        "CAIIS_MODEL_NAME": "Llama-3.1-8B-Instruct",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        _assert(
+            resolve_caiis_model() == "meta-llama/Llama-3.1-8B-Instruct",
+            "org+name should join into model id",
+        )
+
+
+def test_resolve_caiis_model_full_takes_precedence() -> None:
+    env = {
+        "CAIIS_MODEL": "nvidia/nemotron-3-nano",
+        "CAIIS_MODEL_ORG": "meta-llama",
+        "CAIIS_MODEL_NAME": "Llama-3.1-8B-Instruct",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        _assert(
+            resolve_caiis_model() == "nvidia/nemotron-3-nano",
+            "full CAIIS_MODEL should take precedence over org+name",
+        )
+
+
+def test_resolve_llama_guard_model_from_org_and_name() -> None:
+    env = {
+        "LLAMA_GUARD_MODEL_ORG": "meta-llama",
+        "LLAMA_GUARD_MODEL_NAME": "Llama-Guard-3-8B",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        _assert(
+            resolve_llama_guard_model() == "meta-llama/Llama-Guard-3-8B",
+            "org+name should join into Llama Guard model id",
+        )
+
+
+def test_resolve_llama_guard_model_full_takes_precedence() -> None:
+    env = {
+        "LLAMA_GUARD_MODEL": "meta-llama/Llama-Guard-3-8B",
+        "LLAMA_GUARD_MODEL_ORG": "other-org",
+        "LLAMA_GUARD_MODEL_NAME": "other-name",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        _assert(
+            resolve_llama_guard_model() == "meta-llama/Llama-Guard-3-8B",
+            "full LLAMA_GUARD_MODEL should take precedence over org+name",
+        )
+
+
+def test_get_llm_config_caiis_from_model_parts() -> None:
+    env = {
+        "CAIIS_BASE_URL": "https://caiis.example.com/v1",
+        "CAIIS_MODEL_ORG": "meta-llama",
+        "CAIIS_MODEL_NAME": "Llama-3.1-8B-Instruct",
+        "CDP_TOKEN": "test-cdp-token",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        cfg = get_llm_config(provider="caiis")
+        _assert(
+            cfg.model == "meta-llama/Llama-3.1-8B-Instruct",
+            "model should resolve from CAIIS_MODEL_ORG+NAME",
+        )
 
 
 def test_build_caiis_base_url_from_parts() -> None:
@@ -210,6 +277,11 @@ def test_guardrails_server_config_patch() -> None:
 
 def main() -> int:
     tests = [
+        test_resolve_caiis_model_from_org_and_name,
+        test_resolve_caiis_model_full_takes_precedence,
+        test_resolve_llama_guard_model_from_org_and_name,
+        test_resolve_llama_guard_model_full_takes_precedence,
+        test_get_llm_config_caiis_from_model_parts,
         test_build_caiis_base_url_from_parts,
         test_caiis_base_url_overrides_parts,
         test_detect_default_provider,

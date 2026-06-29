@@ -24,12 +24,15 @@ from src.guardrails.violation_parser import (
     is_actual_violation,
     policies_checked_and_passed,
 )
-from src.llm.caiis_url import resolve_guardrails_server_url, resolve_llama_guard_base_url
+from src.llm.caiis_url import (
+    resolve_guardrails_server_url,
+    resolve_llama_guard_base_url,
+    resolve_llama_guard_model,
+)
 from src.llm.provider import (
     CAIIS_DEFAULT_BASE_URL,
     CAIIS_DEFAULT_MODEL,
     LLAMA_GUARD_DEFAULT_BASE_URL,
-    LLAMA_GUARD_DEFAULT_MODEL,
     LLMConfig,
     SafetyModelConfig,
     default_caiis_config,
@@ -245,7 +248,7 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
             st.sidebar.warning("NIM not configured — will fall back to self_check behavior.")
 
     llama_guard_base = resolve_llama_guard_base_url() or LLAMA_GUARD_DEFAULT_BASE_URL
-    llama_guard_model = os.getenv("LLAMA_GUARD_MODEL", LLAMA_GUARD_DEFAULT_MODEL)
+    llama_guard_model = resolve_llama_guard_model()
     if safety_mode == "llama_guard":
         llama_guard_base = st.sidebar.text_input(
             "Llama Guard Base URL",

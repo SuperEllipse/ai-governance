@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.llm.caiis_url import CAIIS_PLACEHOLDER_MARKERS, resolve_caiis_base_url
-from src.llm.provider import CAIIS_DEFAULT_MODEL, _read_cdp_token
+from src.llm.caiis_url import CAIIS_PLACEHOLDER_MARKERS, resolve_caiis_base_url, resolve_caiis_model
+from src.llm.provider import _read_cdp_token
 
 
 def _load_env() -> None:
@@ -45,7 +45,7 @@ def main() -> int:
     _load_env()
 
     base_url = resolve_caiis_base_url()
-    model = os.getenv("CAIIS_MODEL", CAIIS_DEFAULT_MODEL).strip()
+    model = resolve_caiis_model()
     token = os.getenv("CDP_TOKEN", "").strip() or _read_cdp_token()
 
     print("CAIIS connectivity test")

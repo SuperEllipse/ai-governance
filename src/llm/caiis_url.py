@@ -16,7 +16,9 @@ import os
 
 CAIIS_DEFAULT_NAMESPACE = "serving-default"
 CAIIS_DEFAULT_API_PATH = "openai"
+CAIIS_DEFAULT_MODEL = "nvidia/nemotron-3-nano"
 LLAMA_GUARD_DEFAULT_ENDPOINT = "llama-guard-3"
+LLAMA_GUARD_DEFAULT_MODEL = "meta-llama/Llama-Guard-3-8B"
 
 CAIIS_PLACEHOLDER_MARKERS = ("YOUR-DOMAIN", "YOUR-MODEL", "YOUR-ENDPOINT", "YOUR-CLUSTER-ID")
 LLAMA_GUARD_PLACEHOLDER_MARKERS = CAIIS_PLACEHOLDER_MARKERS
@@ -24,6 +26,49 @@ LLAMA_GUARD_PLACEHOLDER_MARKERS = CAIIS_PLACEHOLDER_MARKERS
 
 def _strip_slashes(value: str) -> str:
     return value.strip().strip("/")
+
+
+def _resolve_slash_model(
+    explicit_key: str,
+    org_key: str,
+    name_key: str,
+    default: str,
+) -> str:
+    """Resolve ``org/name`` model ids from CAII-compliant env vars.
+
+    Prefer the full ``explicit_key`` value (allowed in local ``.env`` / CDSW);
+    otherwise join ``org_key`` and ``name_key`` when both are set.
+    """
+    explicit = os.getenv(explicit_key, "").strip()
+    if explicit:
+        return explicit
+
+    org = os.getenv(org_key, "").strip()
+    name = os.getenv(name_key, "").strip()
+    if org and name:
+        return f"{org}/{name}"
+
+    return default
+
+
+def resolve_caiis_model() -> str:
+    """Prefer ``CAIIS_MODEL``; else ``{CAIIS_MODEL_ORG}/{CAIIS_MODEL_NAME}``."""
+    return _resolve_slash_model(
+        "CAIIS_MODEL",
+        "CAIIS_MODEL_ORG",
+        "CAIIS_MODEL_NAME",
+        CAIIS_DEFAULT_MODEL,
+    )
+
+
+def resolve_llama_guard_model() -> str:
+    """Prefer ``LLAMA_GUARD_MODEL``; else ``{LLAMA_GUARD_MODEL_ORG}/{LLAMA_GUARD_MODEL_NAME}``."""
+    return _resolve_slash_model(
+        "LLAMA_GUARD_MODEL",
+        "LLAMA_GUARD_MODEL_ORG",
+        "LLAMA_GUARD_MODEL_NAME",
+        LLAMA_GUARD_DEFAULT_MODEL,
+    )
 
 
 def build_caiis_base_url(
