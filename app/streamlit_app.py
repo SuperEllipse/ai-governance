@@ -24,6 +24,7 @@ from src.guardrails.violation_parser import (
     is_actual_violation,
     policies_checked_and_passed,
 )
+from src.llm.caiis_url import resolve_guardrails_server_url, resolve_llama_guard_base_url
 from src.llm.provider import (
     CAIIS_DEFAULT_BASE_URL,
     CAIIS_DEFAULT_MODEL,
@@ -43,11 +44,14 @@ from src.simulation.batch_runner import run_batch
 from src.simulation.queries import EXAMPLE_QUERIES, ExampleQuery, get_all_queries
 
 def default_guardrails_server_url() -> str:
-    """Sidebar default: GUARDRAILS_PORT (CDSW often 8001), else GUARDRAILS_SERVER_URL."""
+    """Sidebar default: GUARDRAILS_PORT (CDSW often 8001), else resolved server URL."""
     port = os.getenv("GUARDRAILS_PORT", "").strip()
     if port:
         return f"http://127.0.0.1:{port}"
-    return os.getenv("GUARDRAILS_SERVER_URL", "http://127.0.0.1:8001")
+    resolved = resolve_guardrails_server_url()
+    if resolved:
+        return resolved
+    return "http://127.0.0.1:8001"
 
 
 
@@ -168,7 +172,7 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
         provider_options,
         index=provider_options.index(default_provider),
         format_func=lambda x: "OpenAI" if x == "openai" else "Cloudera AI Inference",
-        help="Defaults to CAIIS when CAIIS_BASE_URL is set, or set DEFAULT_LLM_PROVIDER in .env.",
+        help="Defaults to CAIIS when configured (CAIIS_BASE_URL or CAIIS_HOST+ENDPOINT), or set DEFAULT_LLM_PROVIDER in .env.",
     )
 
     if provider == "caiis":
@@ -240,7 +244,7 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
         if not nim_key:
             st.sidebar.warning("NIM not configured — will fall back to self_check behavior.")
 
-    llama_guard_base = os.getenv("LLAMA_GUARD_BASE_URL", LLAMA_GUARD_DEFAULT_BASE_URL)
+    llama_guard_base = resolve_llama_guard_base_url() or LLAMA_GUARD_DEFAULT_BASE_URL
     llama_guard_model = os.getenv("LLAMA_GUARD_MODEL", LLAMA_GUARD_DEFAULT_MODEL)
     if safety_mode == "llama_guard":
         llama_guard_base = st.sidebar.text_input(
@@ -254,7 +258,7 @@ def sidebar_settings() -> tuple[LLMConfig, SafetyModelConfig, GuardrailsMode, li
         )
         if not is_llama_guard_configured() and "YOUR-DOMAIN" in llama_guard_base:
             st.sidebar.warning(
-                "Set LLAMA_GUARD_BASE_URL in .env or enter your Llama Guard CAII endpoint above."
+                "Set LLAMA_GUARD_BASE_URL (or LLAMA_GUARD_HOST+ENDPOINT) in .env or enter your Llama Guard CAII endpoint above."
             )
 
     safety_config = SafetyModelConfig(

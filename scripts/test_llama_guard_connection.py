@@ -20,9 +20,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.guardrails.llama_guard import check_llama_guard, parse_llama_guard_response
+from src.llm.caiis_url import LLAMA_GUARD_PLACEHOLDER_MARKERS, resolve_llama_guard_base_url
 from src.llm.provider import (
     LLAMA_GUARD_DEFAULT_MODEL,
-    LLAMA_GUARD_PLACEHOLDER_MARKERS,
     SafetyModelConfig,
     _read_cdp_token,
     is_llama_guard_configured,
@@ -50,7 +50,7 @@ def _fail(message: str, detail: str = "") -> int:
 def main() -> int:
     _load_env()
 
-    base_url = os.getenv("LLAMA_GUARD_BASE_URL", "").strip()
+    base_url = resolve_llama_guard_base_url()
     model = os.getenv("LLAMA_GUARD_MODEL", LLAMA_GUARD_DEFAULT_MODEL).strip()
     token = os.getenv("CDP_TOKEN", "").strip() or _read_cdp_token()
 
@@ -60,7 +60,10 @@ def main() -> int:
     print(f"  Auth:     {'CDP token present' if token else 'missing (set CDP_TOKEN or /tmp/jwt)'}")
 
     if not base_url:
-        return _fail("LLAMA_GUARD_BASE_URL is not set.")
+        return _fail(
+            "Llama Guard is not configured.",
+            "Set LLAMA_GUARD_BASE_URL or LLAMA_GUARD_HOST + LLAMA_GUARD_ENDPOINT.",
+        )
     if any(marker in base_url for marker in LLAMA_GUARD_PLACEHOLDER_MARKERS):
         return _fail(
             "LLAMA_GUARD_BASE_URL still contains placeholder values.",

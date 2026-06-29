@@ -43,11 +43,11 @@ bash scripts/start_demo.sh
 
 Open the printed URL. In CDSW sessions, open the **Application** on port **8090** (Streamlit binds to `127.0.0.1:8090` because the pod IP already holds that port for the proxy).
 
-The Streamlit sidebar defaults to **Cloudera AI Inference** when `CAIIS_BASE_URL` is set in `.env` (or set `DEFAULT_LLM_PROVIDER=caiis`). Otherwise it defaults to **OpenAI** (`gpt-4o-mini`). Guardrails mode defaults to **Centralized Server** — set **Guardrails Server URL** to the port printed at startup (often `http://127.0.0.1:8001` on CDSW).
+The Streamlit sidebar defaults to **Cloudera AI Inference** when CAIIS is configured in `.env` (`CAIIS_BASE_URL` or `CAIIS_HOST` + `CAIIS_ENDPOINT`; or set `DEFAULT_LLM_PROVIDER=caiis`). Otherwise it defaults to **OpenAI** (`gpt-4o-mini`). Guardrails mode defaults to **Centralized Server** — set **Guardrails Server URL** to the port printed at startup (often `http://127.0.0.1:8001` on CDSW).
 
 ### Using Cloudera AI Inference (CAIIS)
 
-**Option A — environment file (recommended):**
+**Option A — local `.env` with full URL (CDSW sessions, development):**
 
 ```bash
 cp .env.caiis.example .env
@@ -60,7 +60,29 @@ bash scripts/start_guardrails_server.sh   # restart server with CAIIS
 bash scripts/start_demo.sh
 ```
 
-**Option B — Streamlit sidebar:** select **Cloudera AI Inference** in the LLM Provider dropdown and enter Base URL, Model, and CDP token.
+**Option B — Cloudera AI Inference Application deploy (CAII-compliant env vars):**
+
+The [CAII Application deploy UI](https://docs.cloudera.com/machine-learning/cloud/ai-inference/topics/ml-caii-application-deploy.html) restricts environment values: they must start and end with alphanumerics and may only contain `[a-zA-Z0-9-_.]` in between. Full URLs like `CAIIS_BASE_URL=https://ml-....cloudera.site/namespaces/...` are rejected — use hostname and endpoint parts instead:
+
+| Variable | Example | Notes |
+|----------|---------|-------|
+| `CAIIS_HOST` | `ml-YOUR-CLUSTER-ID.YOUR-CAI-DOMAIN` | Inference gateway hostname (no `https://`) |
+| `CAIIS_ENDPOINT` | `mpark-nemotron` | Deployed endpoint name (e.g. `hermes-3-llama-3-1-8b`, `llama-guard-3`) |
+| `CAIIS_NAMESPACE` | `serving-default` | Optional; default `serving-default` |
+| `CAIIS_API_PATH` | `openai` | Optional; default `openai` → `/openai/v1` suffix. Set empty to omit (legacy `/v1` only) |
+| `CAIIS_MODEL` | `nvidia/nemotron-3-nano` | Model id for the OpenAI-compatible API |
+| `CAIIS_MAX_TOKENS` | `1024` | Required for reasoning models |
+| `CDP_TOKEN` | *(your token)* | Bearer auth for CAIIS |
+
+The app builds: `https://{CAIIS_HOST}/namespaces/{CAIIS_NAMESPACE}/endpoints/{CAIIS_ENDPOINT}/{CAIIS_API_PATH}/v1`
+
+For **Llama Guard 3**, use `LLAMA_GUARD_HOST` + `LLAMA_GUARD_ENDPOINT` (defaults to `llama-guard-3`) or the full `LLAMA_GUARD_BASE_URL` in local `.env`.
+
+For **cross-app guardrails** (Streamlit → guardrails server), use `GUARDRAILS_HOST=nemo-guardrails.YOUR-CAI-DOMAIN` in the Application UI, or the full `GUARDRAILS_SERVER_URL` in local `.env`.
+
+> **Migration:** `CAIIS_BASE_URL`, `LLAMA_GUARD_BASE_URL`, and `GUARDRAILS_SERVER_URL` still work in `.env` files and CDSW sessions. For CAII Application deploy, switch to the `*_HOST` + `*_ENDPOINT` variables above.
+
+**Option C — Streamlit sidebar:** select **Cloudera AI Inference** in the LLM Provider dropdown and enter Base URL, Model, and CDP token.
 
 ### Test CAIIS connectivity (CDSW job)
 
@@ -69,7 +91,7 @@ Terminal `curl` succeeding does **not** guarantee the Streamlit/CrewAI process c
 Run a live inference check as a CDSW job or from the session terminal:
 
 ```bash
-# Ensure .env has CAIIS_BASE_URL, CAIIS_MODEL, and CDP_TOKEN (or /tmp/jwt in CDSW)
+# Ensure .env has CAIIS configured (CAIIS_BASE_URL or CAIIS_HOST+ENDPOINT), CAIIS_MODEL, and CDP_TOKEN (or /tmp/jwt in CDSW)
 python scripts/test_caiis_connection.py
 ```
 
@@ -113,13 +135,24 @@ ai-governance/
 | `OPENAI_API_KEY` | OpenAI API key (default provider) |
 | `OPENAI_MODEL` | OpenAI model name (default: `gpt-4o-mini`) |
 | `OPENAI_BASE_URL` | OpenAI-compatible base URL (default: `https://api.openai.com/v1`) |
-| `CAIIS_BASE_URL` | Cloudera AI Inference endpoint `/v1` URL |
+| `CAIIS_BASE_URL` | Full CAIIS `/v1` URL (local `.env` / CDSW sessions) |
+| `CAIIS_HOST` | CAII Application: inference gateway hostname (no scheme) |
+| `CAIIS_ENDPOINT` | CAII Application: endpoint name (e.g. `mpark-nemotron`) |
+| `CAIIS_NAMESPACE` | CAII Application: namespace (default: `serving-default`) |
+| `CAIIS_API_PATH` | CAII Application: API path segment before `/v1` (default: `openai`) |
 | `CAIIS_MODEL` | Model deployed on CAIIS (default: `nvidia/nemotron-3-nano`) |
 | `CAIIS_MAX_TOKENS` | Max completion tokens for CAIIS (default: `1024`; reasoning models need ≥1024) |
 | `CDP_TOKEN` | CDP auth token for CAIIS (or read from `/tmp/jwt` in CDSW) |
+| `LLAMA_GUARD_BASE_URL` | Full Llama Guard `/v1` URL (local `.env`) |
+| `LLAMA_GUARD_HOST` | CAII Application: Llama Guard hostname (falls back to `CAIIS_HOST`) |
+| `LLAMA_GUARD_ENDPOINT` | CAII Application: Llama Guard endpoint (default: `llama-guard-3`) |
+| `LLAMA_GUARD_NAMESPACE` | CAII Application: namespace (falls back to `CAIIS_NAMESPACE`) |
+| `LLAMA_GUARD_API_PATH` | CAII Application: API path (default: `openai`) |
+| `LLAMA_GUARD_MODEL` | Llama Guard model id (default: `meta-llama/Llama-Guard-3-8B`) |
 | `DEFAULT_LLM_PROVIDER` | Sidebar default: `caiis` when CAIIS is configured, else `openai` |
 | `NVIDIA_API_KEY` | For NIM safety models (optional; default is `self_check`) |
-| `GUARDRAILS_SERVER_URL` | Centralized server URL (default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
+| `GUARDRAILS_SERVER_URL` | Centralized server URL (local `.env`; default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
+| `GUARDRAILS_HOST` | CAII Application: guardrails app public hostname (e.g. `nemo-guardrails.YOUR-CAI-DOMAIN`) |
 | `GUARDRAILS_PORT` | **Session/bash only:** preferred bind port for `start_guardrails_server.sh` (example: `8001`; script may pick 8000→8001→8080). **Ignored in CAI Application mode.** |
 | `STREAMLIT_PORT` | UI port override (checked before auto-detect) |
 | `CDSW_APP_PORT` | **CAI Application mode (Streamlit):** platform-injected contributor port; bind on `127.0.0.1` only. Also used in sessions when set. |
@@ -156,7 +189,7 @@ Deploy this demo as **two separate long-running Applications** in Cloudera AI (p
 
 **Environment variables** (set in the Application UI or project `.env`):
 
-- `CAIIS_BASE_URL`, `CAIIS_MODEL`, `CDP_TOKEN` — when using Cloudera AI Inference
+- `CAIIS_BASE_URL` or `CAIIS_HOST` + `CAIIS_ENDPOINT`, `CAIIS_MODEL`, `CDP_TOKEN` — when using Cloudera AI Inference
 - `OPENAI_API_KEY`, `OPENAI_MODEL` — when using OpenAI
 - `GUARDRAILS_CONFIG` — optional; defaults to `guardrails/`
 - `CAI_BIND_PORT_KEY` — optional; set to `CDSW_READONLY_PORT` to expose guardrails on the read-only port instead of `CDSW_APP_PORT`
@@ -182,7 +215,7 @@ This includes `pysqlite3-binary`, which ChromaDB/CrewAI needs when the platform 
 **Environment variables:**
 
 - Same LLM provider vars as above (`OPENAI_*` or `CAIIS_*` + `CDP_TOKEN`)
-- **`GUARDRAILS_SERVER_URL`** — set to the **public HTTPS URL** of Application 1 (e.g. `https://nemo-guardrails.YOUR-CAI-DOMAIN`), **not** `http://127.0.0.1:8001` or `localhost`. Loopback URLs only work inside a single session; each CAI Application runs in its own container.
+- **`GUARDRAILS_SERVER_URL`** or **`GUARDRAILS_HOST`** — set to the **public HTTPS URL** (or hostname) of Application 1 (e.g. `https://nemo-guardrails.YOUR-CAI-DOMAIN` or `GUARDRAILS_HOST=nemo-guardrails.YOUR-CAI-DOMAIN`), **not** `http://127.0.0.1:8001` or `localhost`. Loopback URLs only work inside a single session; each CAI Application runs in its own container.
 
 `CDSW_APP_PORT` is injected by the platform for Streamlit as well; `GUARDRAILS_PORT` does not affect this app.
 
@@ -192,7 +225,7 @@ Start Application 1 first, copy its public URL into `GUARDRAILS_SERVER_URL` on A
 
 1. Open your project → **Applications** → **New Application**.
 2. **Application 1:** name e.g. `nemo-guardrails`, subdomain `nemo-guardrails`, script path `applications/guardrails_server_app.py`, add env vars, create and start.
-3. **Application 2:** name e.g. `banking-demo`, subdomain `banking-demo`, script path `applications/streamlit_demo_app.py`, set `GUARDRAILS_SERVER_URL=https://nemo-guardrails.YOUR-CAI-DOMAIN`, create and start.
+3. **Application 2:** name e.g. `banking-demo`, subdomain `banking-demo`, script path `applications/streamlit_demo_app.py`, set `GUARDRAILS_HOST=nemo-guardrails.YOUR-CAI-DOMAIN` (or `GUARDRAILS_SERVER_URL` in `.env`), create and start.
 4. Open the Streamlit app via its public URL; use **Centralized Server** mode in the sidebar (default).
 
 ### Session / CLI use (unchanged)
@@ -454,13 +487,13 @@ Dataset breakdown (100 queries): 40 happy path, 15 PII, 15 jailbreak, 15 topic, 
 | **Example query** | `What are your current 30-year mortgage rates?` |
 | **Policies to enable** | All four |
 | **Guardrails mode** | Embedded or Centralized Server |
-| **Sidebar change** | LLM Provider → **OpenAI** (default; uses `OPENAI_API_KEY`) then **Cloudera AI Inference** (uses `CAIIS_BASE_URL`, `CAIIS_MODEL`, `CDP_TOKEN` or `/tmp/jwt`) |
+| **Sidebar change** | LLM Provider → **OpenAI** (default; uses `OPENAI_API_KEY`) then **Cloudera AI Inference** (uses CAIIS env vars + `CDP_TOKEN` or `/tmp/jwt`) |
 | **Without guardrails** | Agent uses selected provider via CrewAI `LLM` — routing and tools identical |
 | **With guardrails** | Both main and safety-check models switch to the selected provider in `compose_config()` |
 | **NeMo rail triggered** | None for happy path |
 | **Policy defined in** | `src/llm/provider.py` (`LLMConfig`, `get_llm_config`, `create_crewai_llm`); wired in `app/streamlit_app.py` sidebar |
 
-**CAIIS env example:**
+**CAIIS env example (local `.env`):**
 
 ```bash
 cp .env.caiis.example .env
@@ -471,9 +504,20 @@ export CAIIS_MAX_TOKENS="1024"
 export CDP_TOKEN="your-cdp-bearer-token"   # or /tmp/jwt in CDSW sessions
 ```
 
+**CAII Application deploy (hostname parts):**
+
+```bash
+CAIIS_HOST=ml-YOUR-CLUSTER-ID.YOUR-CAI-DOMAIN
+CAIIS_ENDPOINT=mpark-nemotron
+CAIIS_NAMESPACE=serving-default
+CAIIS_API_PATH=openai
+CAIIS_MODEL=nvidia/nemotron-3-nano
+CAIIS_MAX_TOKENS=1024
+```
+
 Copy `.env.openai.example` or `.env.caiis.example` to `.env` and adjust values. In CDSW sessions, `scripts/common_env.sh` loads `/tmp/jwt` automatically when `CDP_TOKEN` is unset.
 
-**Switching in the UI:** When `CAIIS_BASE_URL` is set, the sidebar defaults to **Cloudera AI Inference** with `nvidia/nemotron-3-nano`. Use the **LLM Provider** dropdown to switch providers; Base URL and Model fields update to each provider's defaults.
+**Switching in the UI:** When CAIIS is configured, the sidebar defaults to **Cloudera AI Inference** with `nvidia/nemotron-3-nano`. Use the **LLM Provider** dropdown to switch providers; Base URL and Model fields update to each provider's defaults.
 
 ---
 

@@ -7,22 +7,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from src.llm.caiis_url import (
+    LLAMA_GUARD_DEFAULT_ENDPOINT,
+    build_caiis_base_url,
+    is_caiis_url_configured,
+    is_llama_guard_url_configured,
+    resolve_caiis_base_url,
+    resolve_llama_guard_base_url,
+)
+
 
 ProviderName = Literal["openai", "caiis"]
 
-CAIIS_DEFAULT_BASE_URL = (
-    "https://ai-inference.YOUR-DOMAIN/namespaces/serving-default/endpoints/YOUR-MODEL/v1"
+CAIIS_DEFAULT_BASE_URL = build_caiis_base_url(
+    "ai-inference.YOUR-DOMAIN",
+    "YOUR-MODEL",
+    api_path="",
 )
 CAIIS_DEFAULT_MODEL = "nvidia/nemotron-3-nano"
 CAIIS_DEFAULT_MAX_TOKENS = 1024
 OPENAI_DEFAULT_MAX_TOKENS = 512
-CAIIS_PLACEHOLDER_MARKERS = ("YOUR-DOMAIN", "YOUR-MODEL")
 
-LLAMA_GUARD_DEFAULT_BASE_URL = (
-    "https://ai-inference.YOUR-DOMAIN/namespaces/serving-default/endpoints/llama-guard-3/openai/v1"
+LLAMA_GUARD_DEFAULT_BASE_URL = build_caiis_base_url(
+    "ai-inference.YOUR-DOMAIN",
+    LLAMA_GUARD_DEFAULT_ENDPOINT,
 )
 LLAMA_GUARD_DEFAULT_MODEL = "meta-llama/Llama-Guard-3-8B"
-LLAMA_GUARD_PLACEHOLDER_MARKERS = ("YOUR-DOMAIN", "YOUR-MODEL")
 
 
 def _default_max_tokens(provider: ProviderName) -> int:
@@ -77,11 +87,8 @@ def _read_cdp_token() -> str:
 
 
 def is_caiis_configured() -> bool:
-    """True when CAIIS_BASE_URL is set to a non-placeholder endpoint."""
-    url = os.getenv("CAIIS_BASE_URL", "").strip()
-    if not url:
-        return False
-    return not any(marker in url for marker in CAIIS_PLACEHOLDER_MARKERS)
+    """True when CAIIS is configured via ``CAIIS_BASE_URL`` or CAII-compliant parts."""
+    return is_caiis_url_configured()
 
 
 def detect_default_provider() -> ProviderName:
@@ -115,10 +122,11 @@ def default_openai_config() -> LLMConfig:
 
 
 def default_caiis_config() -> LLMConfig:
+    resolved_url = resolve_caiis_base_url()
     return LLMConfig(
         provider="caiis",
         model=os.getenv("CAIIS_MODEL", CAIIS_DEFAULT_MODEL),
-        base_url=os.getenv("CAIIS_BASE_URL", CAIIS_DEFAULT_BASE_URL),
+        base_url=resolved_url or CAIIS_DEFAULT_BASE_URL,
         api_key=_read_cdp_token(),
         max_tokens=_default_max_tokens("caiis"),
     )
@@ -193,11 +201,8 @@ SafetyMode = Literal["self_check", "llama_guard", "nim"]
 
 
 def is_llama_guard_configured() -> bool:
-    """True when LLAMA_GUARD_BASE_URL is set to a non-placeholder endpoint."""
-    url = os.getenv("LLAMA_GUARD_BASE_URL", "").strip()
-    if not url:
-        return False
-    return not any(marker in url for marker in LLAMA_GUARD_PLACEHOLDER_MARKERS)
+    """True when Llama Guard is configured via base URL or CAII-compliant parts."""
+    return is_llama_guard_url_configured()
 
 
 def detect_default_safety_mode() -> SafetyMode:
@@ -222,9 +227,8 @@ class SafetyModelConfig:
         default_factory=lambda: os.getenv("LLAMA_GUARD_MODEL", LLAMA_GUARD_DEFAULT_MODEL)
     )
     llama_guard_base_url: str = field(
-        default_factory=lambda: os.getenv(
-            "LLAMA_GUARD_BASE_URL", LLAMA_GUARD_DEFAULT_BASE_URL
-        )
+        default_factory=lambda: resolve_llama_guard_base_url()
+        or LLAMA_GUARD_DEFAULT_BASE_URL
     )
     llama_guard_api_key: str = field(default_factory=_read_cdp_token)
 

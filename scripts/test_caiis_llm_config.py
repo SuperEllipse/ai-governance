@@ -15,6 +15,11 @@ from src.runtime.sqlite_compat import apply_sqlite3_compat
 
 apply_sqlite3_compat()
 
+from src.llm.caiis_url import (
+    build_caiis_base_url,
+    is_caiis_url_configured,
+    resolve_caiis_base_url,
+)
 from src.llm.provider import (
     create_crewai_llm,
     default_caiis_config,
@@ -28,6 +33,46 @@ from src.llm.provider import (
 def _assert(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def test_build_caiis_base_url_from_parts() -> None:
+    expected = (
+        "https://caiis.example.com/namespaces/serving-default/endpoints/mpark-nemotron/openai/v1"
+    )
+    built = build_caiis_base_url("caiis.example.com", "mpark-nemotron")
+    _assert(built == expected, f"build_caiis_base_url mismatch: {built}")
+
+    env = {
+        "CAIIS_HOST": "caiis.example.com",
+        "CAIIS_ENDPOINT": "mpark-nemotron",
+        "CAIIS_NAMESPACE": "serving-default",
+        "CAIIS_API_PATH": "openai",
+        "CAIIS_MODEL": "nvidia/nemotron-3-nano",
+        "CDP_TOKEN": "test-cdp-token",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        _assert(is_caiis_configured(), "CAIIS should be configured from HOST+ENDPOINT")
+        _assert(
+            detect_default_provider() == "caiis",
+            "default provider should be caiis when CAIIS_HOST+ENDPOINT are set",
+        )
+        cfg = get_llm_config(provider="caiis")
+        _assert(cfg.base_url == expected, "base_url should be built from CAIIS parts")
+
+
+def test_caiis_base_url_overrides_parts() -> None:
+    env = {
+        "CAIIS_BASE_URL": "https://legacy.example.com/v1",
+        "CAIIS_HOST": "caiis.example.com",
+        "CAIIS_ENDPOINT": "mpark-nemotron",
+        "CDP_TOKEN": "test-cdp-token",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        cfg = get_llm_config(provider="caiis")
+        _assert(
+            cfg.base_url == "https://legacy.example.com/v1",
+            "CAIIS_BASE_URL should take precedence over parts",
+        )
 
 
 def test_detect_default_provider() -> None:
@@ -165,6 +210,8 @@ def test_guardrails_server_config_patch() -> None:
 
 def main() -> int:
     tests = [
+        test_build_caiis_base_url_from_parts,
+        test_caiis_base_url_overrides_parts,
         test_detect_default_provider,
         test_get_llm_config_caiis,
         test_create_crewai_llm_routes_openai_client,

@@ -44,7 +44,11 @@ if [[ -z "${CDP_TOKEN:-}" ]] && [[ -f /tmp/jwt ]]; then
 fi
 
 # CrewAI and NeMo read OPENAI_API_KEY; map CDP token when using CAIIS.
-if [[ -n "${CAIIS_BASE_URL:-}" ]] && [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -n "${CDP_TOKEN:-}" ]]; then
+_caiis_configured=false
+if [[ -n "${CAIIS_BASE_URL:-}" ]] || { [[ -n "${CAIIS_HOST:-}" ]] && [[ -n "${CAIIS_ENDPOINT:-}" ]]; }; then
+  _caiis_configured=true
+fi
+if [[ "${_caiis_configured}" == true ]] && [[ -z "${OPENAI_API_KEY:-}" ]] && [[ -n "${CDP_TOKEN:-}" ]]; then
   export OPENAI_API_KEY="${CDP_TOKEN}"
 fi
 

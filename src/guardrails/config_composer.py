@@ -266,7 +266,9 @@ def prepare_server_config_from_env(source_dir: Path | str) -> Path:
     model_name = os.environ.get("MAIN_MODEL_NAME", "").strip()
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     safety_mode = os.environ.get("DEFAULT_SAFETY_MODE", os.environ.get("SAFETY_MODE", "")).strip().lower()
-    llama_guard_base_url = os.environ.get("LLAMA_GUARD_BASE_URL", "").strip()
+    from src.llm.caiis_url import resolve_llama_guard_base_url
+
+    llama_guard_base_url = resolve_llama_guard_base_url()
     llama_guard_model = os.environ.get("LLAMA_GUARD_MODEL", "").strip()
     llama_guard_api_key = os.environ.get("CDP_TOKEN", api_key).strip()
     strip_self_check = safety_mode == "llama_guard"
