@@ -85,6 +85,13 @@ DEFAULT_BLOCK_REFUSAL = (
     "Please ask about retail banking services such as accounts, cards, or mortgages."
 )
 
+_TECHNICAL_INTERNAL_ERROR = (
+    "Guardrails server returned an internal error during safety checks. "
+    "Check guardrails server logs for LLMCallException details "
+    "(common with reasoning models when self_check misparses Yes/No). "
+    "Ensure CAIIS_MAX_TOKENS>=1024 and restart the guardrails server."
+)
+
 
 def _friendly_block_refusal(
     query: str,
@@ -93,17 +100,58 @@ def _friendly_block_refusal(
     output_vars: dict[str, Any] | None = None,
 ) -> str:
     """Build a user-facing refusal when guardrails blocked the request."""
-    from src.guardrails.violation_parser import extract_policy_reason
-
-    if output_vars and output_vars.get("policy_reason"):
-        return DEFAULT_BLOCK_REFUSAL
-
-    rail = triggered_rail or "blocked"
-    rail_type = "output" if output_vars and output_vars.get("triggered_output_rail") else "input"
-    reason, _ = extract_policy_reason(rail, rail_type, query, log_data)
-    if reason:
-        return DEFAULT_BLOCK_REFUSAL
     return DEFAULT_BLOCK_REFUSAL
+
+
+def _enrich_block_output_vars(
+    query: str,
+    log_data: dict[str, Any],
+    output_vars: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Ensure blocked responses carry policy_reason and triggered rail metadata."""
+    from src.guardrails.violation_parser import (
+        extract_policy_reason,
+        infer_policy_block_from_query,
+        infer_triggered_rail_from_log,
+    )
+
+    enriched = dict(output_vars or {})
+    triggered_rail = infer_triggered_rail_from_log(log_data, enriched)
+    rail_type = "output" if enriched.get("triggered_output_rail") else "input"
+    if triggered_rail:
+        key = (
+            "triggered_output_rail"
+            if rail_type == "output" or "output" in triggered_rail.lower()
+            else "triggered_input_rail"
+        )
+        enriched.setdefault(key, triggered_rail)
+    if not enriched.get("policy_reason"):
+        reason, _ = extract_policy_reason(
+            triggered_rail or "blocked",
+            rail_type,
+            query,
+            log_data,
+        )
+        if not reason:
+            reason = infer_policy_block_from_query(query)
+        if reason:
+            enriched["policy_reason"] = reason
+    enriched["allowed"] = False
+    return enriched
+
+
+def _blocked_refusal_result(
+    query: str,
+    log_data: dict[str, Any],
+    output_vars: dict[str, Any] | None,
+) -> tuple[str, dict[str, Any], dict[str, Any], bool]:
+    """Return friendly policy-block tuple for server mode."""
+    enriched = _enrich_block_output_vars(query, log_data, output_vars)
+    triggered_rail = (
+        enriched.get("triggered_input_rail") or enriched.get("triggered_output_rail")
+    )
+    content = _friendly_block_refusal(query, triggered_rail, log_data, enriched)
+    return content, log_data, enriched, True
 
 
 def _is_successful_policy_block(
@@ -111,21 +159,50 @@ def _is_successful_policy_block(
     log_data: dict[str, Any] | None = None,
 ) -> bool:
     """True when guardrails metadata indicates an intentional policy block."""
+    from src.guardrails.violation_parser import log_indicates_block_intent
+
     output_vars = output_vars or {}
     if output_vars.get("allowed") is False:
         return True
     if output_vars.get("triggered_input_rail") or output_vars.get("triggered_output_rail"):
         return True
-    log_data = log_data or {}
-    activated = log_data.get("activated_rails") or []
-    if activated:
-        if isinstance(activated, dict):
-            for info in activated.values():
-                if isinstance(info, dict) and info.get("stop"):
-                    return True
-        elif isinstance(activated, list) and len(activated) > 0:
-            return True
-    return False
+    return log_indicates_block_intent(log_data)
+
+
+def _content_needs_friendly_refusal(content: str) -> bool:
+    if not content.strip():
+        return True
+    if _looks_like_internal_error(content):
+        return True
+    return content.strip().lower().startswith("i'm sorry, an internal error")
+
+
+def _extract_server_guardrails_payload(
+    data: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    """Parse guardrails log, output_vars, and message content from a server JSON body."""
+    choice = data.get("choices", [{}])[0]
+    message = choice.get("message", {})
+    content = _ensure_text_response(message.get("content", "") or message)
+    guardrails_meta = data.get("guardrails", {}) or message.get("guardrails", {})
+    log_data = guardrails_meta.get("log", {}) or {}
+    output_vars = guardrails_meta.get(
+        "output_data", guardrails_meta.get("output_vars", {})
+    ) or {}
+    return log_data, output_vars, content
+
+
+def _server_internal_error_result(
+    log_data: dict[str, Any],
+    raw_content: str,
+) -> tuple[str, dict[str, Any], dict[str, Any], bool]:
+    """Genuine guardrails failure — not a policy block."""
+    return (
+        _TECHNICAL_INTERNAL_ERROR,
+        log_data,
+        {"allowed": True, "guardrails_error": raw_content},
+        False,
+    )
 
 
 def _looks_like_internal_error(text: str) -> bool:
@@ -672,6 +749,25 @@ class GuardrailsClient:
                 False,
             )
         except httpx.HTTPStatusError as exc:
+            if exc.response is not None:
+                try:
+                    data = exc.response.json()
+                    log_data, output_vars, content = _extract_server_guardrails_payload(data)
+                    log_data = _label_guardrails_provider(log_data, self.llm_config)
+                    if _is_successful_policy_block(output_vars, log_data):
+                        return _blocked_refusal_result(query, log_data, output_vars)
+                    if _looks_like_internal_error(content) and log_data:
+                        from src.guardrails.violation_parser import (
+                            infer_policy_block_from_query,
+                            log_indicates_block_intent,
+                        )
+
+                        if log_indicates_block_intent(log_data) or infer_policy_block_from_query(
+                            query
+                        ):
+                            return _blocked_refusal_result(query, log_data, output_vars)
+                except Exception:
+                    pass
             detail = exc.response.text[:500] if exc.response is not None else str(exc)
             return (
                 f"Server guardrails error ({exc.response.status_code}): {detail}",
@@ -682,30 +778,15 @@ class GuardrailsClient:
         except Exception as exc:
             return f"Server guardrails error: {exc}", {}, {}, False
 
-        choice = data.get("choices", [{}])[0]
-        message = choice.get("message", {})
-        content = _ensure_text_response(message.get("content", "") or message)
-        guardrails_meta = data.get("guardrails", {}) or message.get("guardrails", {})
-        log_data = _label_guardrails_provider(
-            guardrails_meta.get("log", {}),
-            self.llm_config,
-        )
-        output_vars = guardrails_meta.get("output_data", guardrails_meta.get("output_vars", {}))
+        log_data, output_vars, content = _extract_server_guardrails_payload(data)
+        log_data = _label_guardrails_provider(log_data, self.llm_config)
 
-        triggered_rail = output_vars.get("triggered_input_rail") or output_vars.get(
-            "triggered_output_rail"
-        )
-        allowed = output_vars.get("allowed", True)
         is_block = _is_successful_policy_block(output_vars, log_data)
 
         if is_block:
-            if (
-                _looks_like_internal_error(content)
-                or not content.strip()
-                or content.strip().lower().startswith("i'm sorry, an internal error")
-            ):
-                content = _friendly_block_refusal(query, triggered_rail, log_data, output_vars)
-            return content, log_data, output_vars, True
+            if _content_needs_friendly_refusal(content):
+                return _blocked_refusal_result(query, log_data, output_vars)
+            return content, log_data, _enrich_block_output_vars(query, log_data, output_vars), True
 
         if self.safety_config.mode == "llama_guard":
             blocked = await asyncio.to_thread(
@@ -715,15 +796,14 @@ class GuardrailsClient:
                 return blocked
 
         if _looks_like_internal_error(content):
-            return (
-                "Guardrails server returned an internal error during safety checks. "
-                "Check guardrails server logs for LLMCallException details "
-                "(common with reasoning models when self_check misparses Yes/No). "
-                "Ensure CAIIS_MAX_TOKENS>=1024 and restart the guardrails server.",
-                log_data,
-                {"allowed": False, "guardrails_error": content},
-                False,
-            )
+            from src.guardrails.violation_parser import infer_policy_block_from_query
+
+            if log_data and _is_successful_policy_block({}, log_data):
+                return _blocked_refusal_result(query, log_data, output_vars)
+            if infer_policy_block_from_query(query):
+                return _blocked_refusal_result(query, log_data, output_vars)
+            return _server_internal_error_result(log_data, content)
+        allowed = output_vars.get("allowed", True)
         return content, log_data, output_vars, not allowed
 
 

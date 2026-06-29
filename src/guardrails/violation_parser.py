@@ -14,8 +14,8 @@ DB_PATH = Path(__file__).resolve().parents[2] / "data" / "violations.db"
 
 # Default human-readable reasons when log/completion parsing is unavailable.
 POLICY_REASONS: dict[str, str] = {
-    "self check input": "Input policy violation (off-topic, unsafe, or non-compliant request)",
-    "self check output": "Output policy violation (missing disclaimer, PII, or unsafe content)",
+    "self check input": "Off-topic or non-compliant request (not retail banking)",
+    "self check output": "Response policy violation (missing disclaimer, PII, or unsafe content)",
     "detect sensitive data on input": "Personal data detected in input (PII)",
     "detect sensitive data on output": "Personal data detected in output (PII)",
     "check jailbreak": "Prompt injection / jailbreak attempt",
@@ -24,6 +24,7 @@ POLICY_REASONS: dict[str, str] = {
     "topic safety check output": "Off-topic content in response",
     "llama guard input": "Content flagged as unsafe by Llama Guard",
     "llama guard output": "Bot response flagged as unsafe by Llama Guard",
+    "blocked": "Request blocked by safety policy",
 }
 
 # Keyword → reason when inferring from user query (self_check input blocks).
@@ -236,6 +237,69 @@ def _normalize_activated_rails(log_data: dict[str, Any] | None) -> list[str]:
     if isinstance(activated, dict):
         return [str(k) for k in activated.keys()]
     return [str(r) for r in activated]
+
+
+def log_indicates_block_intent(log_data: dict[str, Any] | None) -> bool:
+    """True when guardrails log shows a rail stopped or self_check voted to block."""
+    if _rail_has_stop(log_data):
+        return True
+    log_data = log_data or {}
+    for call in _iter_llm_calls(log_data):
+        prompt = str(call.get("prompt") or "").lower()
+        task = str(call.get("task") or "").lower()
+        if not any(h in task or h in prompt for h in ("self_check", "self check")):
+            continue
+        completion = str(call.get("completion") or "")
+        if _completion_is_yes(completion):
+            return True
+        if re.search(r"block\s*:\s*yes", completion, re.IGNORECASE):
+            return True
+    activated = log_data.get("activated_rails") or []
+    if isinstance(activated, dict):
+        for name, info in activated.items():
+            if isinstance(info, dict) and info.get("stop"):
+                return True
+            if "self check" in str(name).lower():
+                return True
+    elif isinstance(activated, list):
+        for entry in activated:
+            if isinstance(entry, dict) and entry.get("stop"):
+                return True
+            name = str(entry.get("name", entry)).lower()
+            if "self check" in name:
+                return True
+    return False
+
+
+def infer_triggered_rail_from_log(
+    log_data: dict[str, Any] | None,
+    output_vars: dict[str, Any] | None = None,
+) -> str | None:
+    """Best-effort rail name when triggered_*_rail is missing from output_vars."""
+    output_vars = output_vars or {}
+    if output_vars.get("triggered_input_rail"):
+        return str(output_vars["triggered_input_rail"])
+    if output_vars.get("triggered_output_rail"):
+        return str(output_vars["triggered_output_rail"])
+    stopped = _stopped_rail_names(log_data)
+    if stopped:
+        return stopped[0]
+    log_data = log_data or {}
+    activated = log_data.get("activated_rails") or []
+    if isinstance(activated, dict):
+        for name in activated:
+            return str(name)
+    elif isinstance(activated, list) and activated:
+        first = activated[0]
+        if isinstance(first, dict):
+            return str(first.get("name", "self check input"))
+        return str(first)
+    return None
+
+
+def infer_policy_block_from_query(query: str) -> str:
+    """Infer a policy reason from the user query when server metadata is missing."""
+    return _infer_reason_from_hints(query, _QUERY_REASON_HINTS)
 
 
 def _rail_has_stop(log_data: dict[str, Any] | None) -> bool:
@@ -490,7 +554,7 @@ def is_actual_violation(
         return True
     if output_vars.get("triggered_output_rail"):
         return True
-    return _rail_has_stop(log_data)
+    return log_indicates_block_intent(log_data)
 
 
 def policies_checked_and_passed(
