@@ -161,16 +161,31 @@ ai-governance/
 | `NVIDIA_API_KEY` | For NIM safety models (optional; default is `self_check`) |
 | `GUARDRAILS_SERVER_URL` | Centralized server URL (local `.env`; default sidebar: `http://127.0.0.1:8001` when `GUARDRAILS_PORT` unset) |
 | `GUARDRAILS_HOST` | CAII Application: guardrails app public hostname (e.g. `nemo-guardrails.YOUR-CAI-DOMAIN`) |
-| `GUARDRAILS_PORT` | **Session/bash only:** preferred bind port for `start_guardrails_server.sh` (example: `8001`; script may pick 8000→8001→8080). **Ignored in CAI Application mode.** |
+| `GUARDRAILS_PORT` | **Session/bash only:** preferred bind port for `start_guardrails_server.sh` (example: `8001`; script may pick 8000→8001→8080). **Ignored in Application mode.** |
 | `STREAMLIT_PORT` | UI port override (checked before auto-detect) |
-| `CDSW_APP_PORT` | **CAI Application mode (Streamlit):** platform-injected contributor port; bind on `127.0.0.1` only. Also used in sessions when set. |
+| `APP_PORT` | **CAII Application mode:** platform-injected internal port (hardcoded to `8080` per [CAII docs](https://docs.cloudera.com/machine-learning/cloud/ai-inference/topics/ml-caii-application-deploy.html)); bind on `127.0.0.1` only |
+| `SERVICE_DOMAIN` | **CAII Application:** service domain (auto-detected with `APP_PORT` / `APP_URL`) |
+| `APP_URL` | **CAII Application:** public HTTPS URL for this app |
+| `DEPLOY_PLATFORM` | Optional override: `cai` (Workbench) or `caii` (Inference Service) when auto-detect is ambiguous |
+| `CDSW_APP_PORT` | **CAI Workbench Application mode (Streamlit):** platform-injected contributor port; bind on `127.0.0.1` only. Also used in sessions when set. |
 | `CDSW_READONLY_PORT` | **CAI Application mode (optional):** read-only access port; bind on `127.0.0.1`. Set `CAI_BIND_PORT_KEY=CDSW_READONLY_PORT` on guardrails to use this port. |
 | `CDSW_PUBLIC_PORT` | **Deprecated** platform port for all users; still supported for guardrails fallback. |
 | `CAI_BIND_PORT_KEY` | Optional guardrails Application override: `CDSW_APP_PORT`, `CDSW_READONLY_PORT`, or `CDSW_PUBLIC_PORT` |
 
 ## Cloudera AI Applications
 
-Deploy this demo as **two separate long-running Applications** in Cloudera AI (per [CAI Applications docs](https://docs.cloudera.com/machine-learning/cloud/applications/topics/ml-applications-c.html)). Each Application runs in its **own engine** and receives its own platform-injected `CDSW_APP_PORT`.
+Deploy this demo as **two separate long-running Applications**. The entry scripts auto-detect the platform and bind on `127.0.0.1` to the correct injected port:
+
+| Platform | Port env var | Default | Docs |
+|----------|--------------|---------|------|
+| **CAI Workbench** | `CDSW_APP_PORT` (+ optional `CDSW_READONLY_PORT`, `CDSW_PUBLIC_PORT`) | platform-assigned (e.g. `8090`) | [CAI Applications](https://docs.cloudera.com/machine-learning/cloud/applications/topics/ml-applications-c.html) |
+| **CAII Inference Service** | `APP_PORT` | `8080` | [CAII Application deploy](https://docs.cloudera.com/machine-learning/cloud/ai-inference/topics/ml-caii-application-deploy.html) |
+
+Set `DEPLOY_PLATFORM=cai` or `DEPLOY_PLATFORM=caii` only when auto-detect is ambiguous. CAII also injects `SERVICE_DOMAIN` and `APP_URL` at runtime.
+
+### CAI Workbench (legacy Applications)
+
+Deploy as **two separate Applications** in Cloudera AI Workbench (per [CAI Applications docs](https://docs.cloudera.com/machine-learning/cloud/applications/topics/ml-applications-c.html)). Each Application runs in its **own engine** and receives its own platform-injected `CDSW_APP_PORT`.
 
 > **Localhost bind (required):** Per [Cloudera CDSW embedded web app docs](https://docs.cloudera.com/cdsw/1.10.5/embedded-web-apps/topics/cdsw-tensorboard--shiny--and-others--cdsw-app-port-or-cdsw-readonly-port-.html), entry scripts must bind to **`127.0.0.1` (localhost)** — not `0.0.0.0`. The platform proxy forwards public HTTPS traffic to the loopback port.
 
@@ -245,7 +260,41 @@ bash scripts/start_guardrails_server.sh   # → applications/guardrails_server_a
 bash scripts/start_demo.sh                # → applications/streamlit_demo_app.py --mode session
 ```
 
-Session mode picks loopback addresses and free ports (`127.0.0.1:8000` / `8001` for guardrails, `127.0.0.1:8090` for Streamlit).
+Session mode picks loopback addresses and free ports (`127.0.0.1:8000` / `8001` for guardrails, `127.0.0.1:8090` for Streamlit on CAI, `127.0.0.1:8080` on CAII).
+
+### CAII Inference Service Applications
+
+Deploy on [Cloudera AI Inference Service](https://docs.cloudera.com/machine-learning/cloud/ai-inference/topics/ml-caii-application-deploy.html) using the same entry scripts. The platform injects **`APP_PORT=8080`** — your app **must** listen on `127.0.0.1:8080` (not `CDSW_APP_PORT`). `SERVICE_DOMAIN` and `APP_URL` are also available for public URLs.
+
+| Field | Application 1 (guardrails) | Application 2 (Streamlit) |
+|-------|---------------------------|---------------------------|
+| **Script** | `applications/guardrails_server_app.py` | `applications/streamlit_demo_app.py` |
+| **Bind port** | `APP_PORT` → `127.0.0.1:8080` | `APP_PORT` → `127.0.0.1:8080` |
+| **Cross-app URL** | Copy `APP_URL` or hostname from deploy UI | Set `GUARDRAILS_HOST=<app1-hostname>` or `GUARDRAILS_SERVER_URL` |
+
+**CAII Application env vars** (same LLM vars as above, plus):
+
+```
+# Platform-injected (do not set manually):
+# APP_PORT=8080
+# SERVICE_DOMAIN=...
+# APP_URL=https://...
+
+# Cross-app (Application 2 only):
+GUARDRAILS_HOST=nemo-guardrails.YOUR-CAI-DOMAIN
+```
+
+> **Port behavior:** `GUARDRAILS_PORT` is ignored in Application mode on both CAI and CAII. Cross-app communication uses each application's **public HTTPS URL** (`APP_URL` / `GUARDRAILS_HOST`), not loopback.
+
+**Verify locally:**
+
+```bash
+python3 scripts/test_port_resolution.py
+APP_PORT=8080 SERVICE_DOMAIN=demo.example.com python3 -c "
+from src.runtime.startup import resolve_app_port
+print(resolve_app_port('streamlit'))
+"
+```
 
 ## Demo Scenarios
 

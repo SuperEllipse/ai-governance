@@ -38,14 +38,13 @@ _bootstrap_import_path()
 from src.runtime.startup import (  # noqa: E402
     configure_guardrails_llm_env,
     get_guardrails_config_path,
+    is_platform_application_env,
     load_dotenv_files,
     pick_bind,
     print_startup_banner,
     resolve_project_root,
     setup_pythonpath,
 )
-
-_CAI_PLATFORM_PORT_KEYS = ("CDSW_APP_PORT", "CDSW_READONLY_PORT", "CDSW_PUBLIC_PORT")
 
 
 def _script_anchor() -> str | None:
@@ -58,7 +57,7 @@ def _script_anchor() -> str | None:
 def _detect_mode(cli_mode: str | None) -> str:
     if cli_mode:
         return cli_mode
-    if any(os.environ.get(key) for key in _CAI_PLATFORM_PORT_KEYS):
+    if is_platform_application_env():
         return "application"
     return "session"
 
@@ -76,7 +75,8 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Bind strategy: application binds localhost (127.0.0.1) on a platform port "
-            "(CDSW_APP_PORT, CDSW_READONLY_PORT, or CDSW_PUBLIC_PORT; override with CAI_BIND_PORT_KEY)."
+            "(CAII: APP_PORT; CAI Workbench: CDSW_APP_PORT, CDSW_READONLY_PORT, or "
+            "CDSW_PUBLIC_PORT; override guardrails with CAI_BIND_PORT_KEY)."
         ),
     )
     parser.add_argument(
@@ -135,7 +135,7 @@ _main_started = False
 def _should_autostart() -> bool:
     if __name__ == "__main__":
         return True
-    if any(os.environ.get(key) for key in _CAI_PLATFORM_PORT_KEYS):
+    if is_platform_application_env():
         return True
     return _running_under_ipykernel()
 
