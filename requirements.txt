@@ -1,8 +1,7 @@
 nemoguardrails[server,sdd,jailbreak,openai]
 crewai
-streamlit
-plotly
-pandas
+fastapi
+uvicorn
 openai
 httpx
 pyyaml

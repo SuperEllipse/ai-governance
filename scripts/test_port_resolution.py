@@ -78,10 +78,10 @@ def test_cai_port_precedence_over_caii_signals() -> None:
     )
 
 
-def test_resolve_cai_streamlit_port() -> None:
+def test_resolve_cai_web_port() -> None:
     def run() -> None:
-        port, key = resolve_app_port("streamlit")
-        _assert(port == 8100, "streamlit should bind CDSW_APP_PORT on CAI")
+        port, key = resolve_app_port("web")
+        _assert(port == 8100, "web UI should bind CDSW_APP_PORT on CAI")
         _assert(key == "CDSW_APP_PORT", "env key should be CDSW_APP_PORT")
 
     _with_env({"CDSW_APP_PORT": "8100"}, run)
@@ -114,7 +114,7 @@ def test_resolve_cai_guardrails_bind_port_key() -> None:
 
 def test_resolve_caii_default_port() -> None:
     def run() -> None:
-        port, key = resolve_app_port("streamlit")
+        port, key = resolve_app_port("web")
         _assert(port == 8080, "CAII default bind port should be 8080")
         _assert(key == "APP_PORT", "env key should be APP_PORT")
 
@@ -137,7 +137,7 @@ def main() -> int:
         test_detect_caii_from_service_domain,
         test_explicit_deploy_platform_override,
         test_cai_port_precedence_over_caii_signals,
-        test_resolve_cai_streamlit_port,
+        test_resolve_cai_web_port,
         test_resolve_cai_guardrails_default_port_key,
         test_resolve_cai_guardrails_bind_port_key,
         test_resolve_caii_default_port,

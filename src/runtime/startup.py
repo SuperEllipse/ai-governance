@@ -10,7 +10,7 @@ from typing import Literal
 
 Mode = Literal["session", "application"]
 Platform = Literal["cai", "caii", "local"]
-Service = Literal["streamlit", "guardrails"]
+Service = Literal["web", "guardrails"]
 
 _CAI_PORT_KEYS = ("CDSW_APP_PORT", "CDSW_READONLY_PORT", "CDSW_PUBLIC_PORT")
 _CAII_PORT_KEYS = ("APP_PORT",)
@@ -212,14 +212,14 @@ def resolve_app_port(service: Service) -> tuple[int, str]:
             return port, "APP_PORT"
         return _CAII_DEFAULT_APP_PORT, "APP_PORT"
 
-    if service == "streamlit":
+    if service == "web":
         port = _parse_port_env("CDSW_APP_PORT")
         if port is not None:
             return port, "CDSW_APP_PORT"
         raise RuntimeError(
-            "Streamlit in Cloudera AI Workbench Application mode requires CDSW_APP_PORT "
+            "The web UI in Cloudera AI Workbench Application mode requires CDSW_APP_PORT "
             "to be injected by the platform. Do not hardcode port numbers; "
-            "register Streamlit as its own Application so the platform assigns a port."
+            "register the web UI as its own Application so the platform assigns a port."
         )
 
     bind_key = os.environ.get(_CAI_BIND_PORT_KEY_ENV, "").strip()
@@ -255,7 +255,7 @@ def _application_bind_port(service: Service) -> tuple[int, str]:
 def _pick_application_bind(service: Service) -> tuple[str, int]:
     """Bind the platform port on localhost only (per Cloudera CDSW docs)."""
     port, port_key = _application_bind_port(service)
-    label = "Streamlit" if service == "streamlit" else "guardrails server"
+    label = "web UI" if service == "web" else "guardrails server"
     host = "127.0.0.1"
     if not _can_bind(host, port):
         raise RuntimeError(
@@ -267,13 +267,13 @@ def _pick_application_bind(service: Service) -> tuple[str, int]:
 
 
 def pick_bind(mode: Mode, service: Service) -> tuple[str, int]:
-    """Return ``(host, port)`` for Streamlit or the guardrails server."""
+    """Return ``(host, port)`` for the web UI or the guardrails server."""
     if mode == "application":
         return _pick_application_bind(service)
 
-    if service == "streamlit":
+    if service == "web":
         candidates: list[int] = []
-        for key in ("STREAMLIT_PORT", "APP_PORT", "CDSW_APP_PORT"):
+        for key in ("WEB_PORT", "APP_PORT", "CDSW_APP_PORT"):
             port = _parse_port_env(key)
             if port is not None:
                 candidates.append(port)
@@ -282,7 +282,7 @@ def pick_bind(mode: Mode, service: Service) -> tuple[str, int]:
             if detect_deploy_platform() == "caii"
             else _CAI_SESSION_DEFAULT_PORT
         )
-        for fallback in (8501, session_default, _CAII_DEFAULT_APP_PORT):
+        for fallback in (session_default, _CAII_DEFAULT_APP_PORT, 8501):
             if fallback not in candidates:
                 candidates.append(fallback)
         hosts = ("127.0.0.1", "0.0.0.0")
@@ -301,7 +301,7 @@ def pick_bind(mode: Mode, service: Service) -> tuple[str, int]:
             if _can_bind(host, port):
                 return host, port
 
-    label = "Streamlit" if service == "streamlit" else "guardrails server"
+    label = "web UI" if service == "web" else "guardrails server"
     raise RuntimeError(f"Could not find an available host/port for {label}.")
 
 
@@ -322,7 +322,7 @@ def _application_port_key(service: Service, port: int) -> str:
     if detect_deploy_platform() == "caii":
         return "APP_PORT"
 
-    if service == "streamlit":
+    if service == "web":
         return "CDSW_APP_PORT"
 
     bind_key = os.environ.get(_CAI_BIND_PORT_KEY_ENV, "").strip()
@@ -432,7 +432,7 @@ def print_startup_banner(
         print(f"=== Guardrails server bound to port {port} ({bind_host}) ===")
         print(f"NeMo Guardrails server listening on {bind_host}:{port}")
         print(f"  API URL: http://127.0.0.1:{port}/")
-        print(f"  Streamlit sidebar (Centralized Server): http://127.0.0.1:{port}")
+        print(f"  Web UI settings (Guardrails Server URL): http://127.0.0.1:{port}")
         print(f"  (http://localhost:{port} also works on the same machine)")
         print("")
         if mode == "application":
@@ -448,7 +448,7 @@ def print_startup_banner(
                 )
             print("  GUARDRAILS_PORT only applies to session/bash mode (start_guardrails_server.sh).")
             print(
-                "  On Application 2 (Streamlit), set GUARDRAILS_SERVER_URL or GUARDRAILS_HOST to "
+                "  On Application 2 (web UI), set GUARDRAILS_SERVER_URL or GUARDRAILS_HOST to "
                 "Application 1's public HTTPS URL — not http://127.0.0.1 or localhost."
             )
         else:
@@ -461,7 +461,7 @@ def print_startup_banner(
         return
 
     print("")
-    print(f"Streamlit binding: {bind_host}:{port}")
+    print(f"Web UI binding: {bind_host}:{port}")
     print(f"  Direct URL: http://127.0.0.1:{port}/")
 
     if mode == "session" and bind_host == "127.0.0.1":

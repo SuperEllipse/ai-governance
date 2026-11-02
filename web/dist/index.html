@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NeMo Guardrails Banking Demo</title>
+    <script>
+      // Apply the saved theme before first paint. Default is light (white), whatever the OS uses.
+      try {
+        if (localStorage.getItem("guardrails-demo-theme") === "dark") {
+          document.documentElement.dataset.theme = "dark";
+        }
+      } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="./assets/index-B4aV1GLn.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BmwINRN3.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

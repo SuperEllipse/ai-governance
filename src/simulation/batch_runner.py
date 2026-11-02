@@ -22,10 +22,11 @@ async def run_batch(
     queries: list[SimQuery] | None = None,
     progress_callback: Callable[[int, int, str], None] | None = None,
     store: ViolationStore | None = None,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     """Run all simulation queries and store violations."""
     query_list = queries or get_all_queries()
-    run_id = str(uuid.uuid4())[:8]
+    run_id = run_id or str(uuid.uuid4())[:8]
     started = datetime.now(timezone.utc).isoformat()
     client = GuardrailsClient(llm_config, safety_config, server_url)
     violation_store = store or ViolationStore()

@@ -3,44 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import os
 import sys
-import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-
-def _has_running_asyncio_loop() -> bool:
-    """True when ipykernel/Jupyter already owns the main-thread event loop."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return False
-    return True
-
-
-def _uvicorn_thread_target(
-    server_app,
-    host: str,
-    port: int,
-    result: dict[str, object],
-) -> None:
-    import uvicorn
-
-    try:
-        uvicorn.run(server_app, host=host, port=port, log_level="info")
-    except SystemExit as exc:
-        code = exc.code if exc.code is not None else 0
-        result["exit_code"] = int(code)
-        if int(code) != 0:
-            result["error"] = exc
-    except BaseException as exc:
-        result["exit_code"] = 1
-        result["error"] = exc
 
 
 def _verify_bind(host: str, port: int) -> bool:
@@ -63,7 +32,7 @@ def run_uvicorn_server(
     default_config_id: str | None = None,
 ) -> int:
     try:
-        import uvicorn
+        import uvicorn  # noqa: F401
         from fastapi import FastAPI
 
         from nemoguardrails import utils
@@ -117,37 +86,9 @@ def run_uvicorn_server(
     if not _verify_bind(host, port):
         return 1
 
-    if _has_running_asyncio_loop():
-        print(
-            "Detected running asyncio event loop (ipykernel/Jupyter); "
-            "starting uvicorn in a background thread.",
-            file=sys.stderr,
-        )
-        result: dict[str, object] = {"exit_code": 0, "error": None}
-        thread = threading.Thread(
-            target=_uvicorn_thread_target,
-            args=(server_app, host, port, result),
-            name="guardrails-uvicorn",
-            daemon=False,
-        )
-        thread.start()
-        thread.join()
-        exit_code = int(result.get("exit_code", 0))
-        error = result.get("error")
-        if error is not None:
-            print(f"ERROR: uvicorn thread failed: {error!r}", file=sys.stderr)
-            return exit_code if exit_code != 0 else 1
-        return exit_code
+    from src.runtime.uvicorn_runner import serve
 
-    try:
-        uvicorn.run(server_app, host=host, port=port, log_level="info")
-    except SystemExit as exc:
-        code = exc.code if exc.code is not None else 0
-        return int(code) if int(code) != 0 else 1
-    except OSError as exc:
-        print(f"ERROR: uvicorn failed to bind or start: {exc}", file=sys.stderr)
-        return 1
-    return 0
+    return serve(server_app, host, port, thread_name="guardrails-uvicorn")
 
 
 def main() -> int:

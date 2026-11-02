@@ -37,7 +37,7 @@ fi
 export OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}"
 export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
 
-# CAIIS: sidebar defaults to OpenAI unless DEFAULT_LLM_PROVIDER=caiis (see detect_default_provider)
+# CAIIS: web UI defaults to OpenAI unless DEFAULT_LLM_PROVIDER=caiis (see detect_default_provider)
 # CDP token: env var or CDSW session file (for CAIIS auth)
 if [[ -z "${CDP_TOKEN:-}" ]] && [[ -f /tmp/jwt ]]; then
   export CDP_TOKEN="$(tr -d '[:space:]' < /tmp/jwt)"
@@ -52,16 +52,6 @@ if [[ "${_caiis_configured}" == true ]] && [[ -z "${OPENAI_API_KEY:-}" ]] && [[ 
   export OPENAI_API_KEY="${CDP_TOKEN}"
 fi
 
-pick_streamlit_bind() {
-  python3 -c "
-import sys
-sys.path.insert(0, '${ROOT}')
-from src.runtime.startup import pick_bind
-host, port = pick_bind('session', 'streamlit')
-print(f'{host} {port}')
-"
-}
-
 pick_guardrails_bind() {
   python3 -c "
 import sys
@@ -72,28 +62,6 @@ print(f'{host} {port}')
 "
 }
 
-print_streamlit_urls() {
-  local bind_host="$1"
-  local port="$2"
-
-  echo ""
-  echo "Streamlit binding: ${bind_host}:${port}"
-  echo "  Direct URL: http://127.0.0.1:${port}/"
-
-  if [ -n "${CDSW_APP_PORT:-}" ] && [ "${port}" = "${CDSW_APP_PORT}" ] && [ "${bind_host}" = "127.0.0.1" ]; then
-    echo "  CDSW: use the session Application on port ${CDSW_APP_PORT} (proxy to 127.0.0.1:${CDSW_APP_PORT})."
-  fi
-
-  if [ -n "${CDSW_DOMAIN:-}" ] && [ -n "${CDSW_MASTER_ID:-}" ] && [ -n "${CDSW_PROJECT:-}" ]; then
-    local owner
-    owner="$(echo "${CDSW_PROJECT_URL:-}" | sed -n 's|.*/projects/\([^/]*\)/.*|\1|p')"
-    if [ -n "${owner}" ]; then
-      echo "  Session: https://${CDSW_DOMAIN}/${owner}/${CDSW_PROJECT}/engine/${CDSW_MASTER_ID}/"
-    fi
-  fi
-  echo ""
-}
-
 print_guardrails_urls() {
   local bind_host="$1"
   local port="$2"
@@ -102,7 +70,7 @@ print_guardrails_urls() {
   echo "=== Guardrails server bound to port ${port} (${bind_host}) ==="
   echo "NeMo Guardrails server listening on ${bind_host}:${port}"
   echo "  API URL: http://127.0.0.1:${port}/"
-  echo "  Streamlit sidebar (Centralized Server): http://127.0.0.1:${port}"
+  echo "  Web UI settings (Guardrails Server URL): http://127.0.0.1:${port}"
   echo "  (http://localhost:${port} also works on the same machine)"
   echo ""
   echo "  Add to .env (match this port):"

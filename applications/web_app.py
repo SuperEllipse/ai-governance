@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Long-running Cloudera AI Application entry point for the Streamlit banking demo."""
+"""Long-running Cloudera AI Application entry point for the banking demo web UI."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def _ensure_sqlite_compat() -> None:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Streamlit banking demo (CAI Application)")
+    parser = argparse.ArgumentParser(description="Banking demo web UI (CAI Application)")
     parser.add_argument(
         "--mode",
         choices=("session", "application"),
@@ -100,36 +100,27 @@ def main() -> int:
     load_dotenv_files(project_root)
 
     mode = _detect_mode(args.mode)
-    bind_host, port = pick_bind(mode, "streamlit")
+    bind_host, port = pick_bind(mode, "web")
 
-    app_path = project_root / "app" / "streamlit_app.py"
-    if not app_path.is_file():
-        print(f"Streamlit app not found: {app_path}", file=sys.stderr)
-        return 1
+    from src.api.app import WEB_DIST, create_app
+    from src.runtime.uvicorn_runner import serve
 
     print(f"PYTHONPATH={os.environ.get('PYTHONPATH', '')}")
-    print("Starting Streamlit demo...")
+    print("Starting banking demo web UI...")
+    if not (WEB_DIST / "index.html").is_file():
+        print(
+            f"WARNING: {WEB_DIST} not found; only the API will be served. "
+            "Build the UI with: cd web && npm ci && npm run build",
+            file=sys.stderr,
+        )
     if mode == "session":
         print("")
         print("Recommended: run guardrails server in a separate terminal first:")
         print("  bash scripts/start_guardrails_server.sh")
-        print("Then select 'Centralized Server' mode in the Streamlit sidebar (default).")
-    print_startup_banner("streamlit", bind_host=bind_host, port=port, mode=mode)
+        print("Then select 'Centralized Server' mode in the web UI settings (default).")
+    print_startup_banner("web", bind_host=bind_host, port=port, mode=mode)
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "streamlit",
-        "run",
-        str(app_path),
-        "--server.port",
-        str(port),
-        "--server.address",
-        bind_host,
-        "--browser.gatherUsageStats",
-        "false",
-    ]
-    return subprocess.call(cmd)
+    return serve(create_app(), bind_host, port, thread_name="web-uvicorn")
 
 
 _main_started = False

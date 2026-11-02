@@ -42,7 +42,7 @@ def _default_max_tokens(provider: ProviderName) -> int:
 
 
 def _load_project_env() -> None:
-    """Load .env when Streamlit is started without scripts/start_demo.sh."""
+    """Load .env when the app is started without scripts/start_demo.sh."""
     try:
         from dotenv import load_dotenv
     except ImportError:
@@ -92,7 +92,7 @@ def is_caiis_configured() -> bool:
 
 
 def detect_default_provider() -> ProviderName:
-    """Pick the default sidebar provider.
+    """Pick the default settings-panel provider.
 
     Uses DEFAULT_LLM_PROVIDER when set; otherwise CAIIS when configured, else OpenAI.
     """
@@ -206,7 +206,7 @@ def is_llama_guard_configured() -> bool:
 
 
 def detect_default_safety_mode() -> SafetyMode:
-    """Pick default sidebar safety mode from env."""
+    """Pick default settings-panel safety mode from env."""
     override = os.getenv("DEFAULT_SAFETY_MODE", "").strip().lower()
     if override in ("self_check", "llama_guard", "nim"):
         return override  # type: ignore[return-value]

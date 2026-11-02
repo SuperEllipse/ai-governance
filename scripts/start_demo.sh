@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Streamlit banking demo (session/CLI wrapper).
+# Start the banking demo web UI (session/CLI wrapper).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,4 +15,4 @@ if [ "${START_SERVER}" = "true" ]; then
   sleep 3
 fi
 
-exec python3 "${ROOT}/applications/streamlit_demo_app.py" --mode session
+exec python3 "${ROOT}/applications/web_app.py" --mode session

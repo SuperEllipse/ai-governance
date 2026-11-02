@@ -222,9 +222,9 @@ def _looks_like_raw_generation_response(text: str) -> bool:
 def _prepare_worker_event_loop() -> None:
     """Give each embedded guardrails check a fresh asyncio loop in the worker thread.
 
-    Streamlit calls ``asyncio.run()`` per request, which closes the main loop and
-    any httpx transports bound to it. Reusing a stale loop in the default thread
-    pool causes ``TCPTransport closed`` errors on subsequent NeMo LLM calls.
+    Embedded checks run ``run_until_complete`` inside ``asyncio.to_thread`` workers.
+    Reusing a closed or foreign loop in a pooled worker thread causes
+    ``TCPTransport closed`` errors on subsequent NeMo LLM calls.
     """
     asyncio.set_event_loop(asyncio.new_event_loop())
 
