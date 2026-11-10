@@ -141,7 +141,7 @@ flowchart LR
 | `guardrails/` | NeMo Guardrails base config, prompts, and policy modules |
 | `scripts/` | Start scripts for sessions and connectivity checks |
 | `src/` | Python code: agents, guardrails client, model providers, API, batch simulation |
-| `web/` | React + TypeScript frontend (`web/dist/` is the committed build) |
+| `interface/` | React + TypeScript frontend (`interface/dist/` is the committed build) |
 | `.env.*.example` | Environment templates for Cloudera AI Inference or OpenAI |
 | `requirements.txt` | Python dependencies |
 

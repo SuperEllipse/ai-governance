@@ -1,0 +1,89 @@
+# Cloudera Blueprint catalog metadata
+# Consumed by the master blueprint website and the internal catalog.
+#
+# Every field below is either filled or deliberately empty. An empty string means
+# "does not exist yet" and is the honest answer; a plausible-looking placeholder is
+# worse than a blank, because a reviewer reads it as filled in and follows it.
+
+# --- Identity ---
+name: "AI Governance with NVIDIA NeMo Guardrails"
+slug: "ai-governance"                        # URL-safe repo / catalog identifier
+description: "Enforce PII, jailbreak, topic, and toxicity policies on a multi-agent banking assistant with NVIDIA NeMo Guardrails, and measure what they catch."
+reprise_link: ""                             # Public reprise link. Empty: no walkthrough has
+                                             # been recorded -- the "Demo" section of README.md
+                                             # still carries a TODO for it. The two screenshots
+                                             # in assets/ are the only visual walkthrough today.
+
+# --- Classification (website filters) ---
+catalog_classification:
+  - Enterprise Blueprint                     # Options: Enterprise Blueprint | Research | Launchable (AMP) | Developer Example
+launchable: False                            # No launch descriptor ships (no .project-metadata.yaml),
+                                             # so the repository is cloned and run rather than launched
+                                             # in one click. It is started by hand -- two scripts in a
+                                             # Workbench session, or two Cloudera AI Applications
+                                             # created from applications/. See "Quickstart" in README.md.
+lifecycle_status: Active                     # Maintained, not retired. Chat Compare, Batch Dashboard,
+                                             # both guardrails modes (Embedded and Centralized Server),
+                                             # and deployment as two Cloudera AI Applications run today.
+                                             # All banking data is dummy data (data/dummy_cis/).
+
+# --- Industry & alignment ---
+industry: "Financial Services"               # e.g., General | Telecom | Financial Services | Healthcare & Life Sciences | Retail | Media | Physical AI & Robotics
+industry_alignment: "Vertical"               # The guardrails pattern is domain-independent, but the
+                                             # agents, dummy data, topic-control policy, and 100-query
+                                             # test set are all written for retail banking
+target_vertical: "Retail Banking"
+
+# --- Tags (website search & browse) ---
+# Capability and audience, not implementation. Someone searching the catalog knows
+# what they need to do, not which web framework does it.
+tags:
+  - ai-governance
+  - guardrails
+  - ai-safety
+  - responsible-ai
+  - pii-detection
+  - jailbreak-detection
+  - prompt-injection
+  - content-moderation
+  - compliance
+  - multi-agent
+  - banking
+  - llm-evaluation
+
+# --- Relationships ---
+product_mapping:
+  - Cloudera AI Workbench                    # Hosts the project; start_guardrails_server.sh and
+                                             # start_demo.sh run in a session
+  - Cloudera AI Application                  # applications/guardrails_server_app.py (NeMo Guardrails
+                                             # server) and applications/web_app.py (FastAPI + React UI)
+  - Cloudera AI Inference Service            # Serves the main model and the optional Llama Guard 3
+                                             # judge; OpenAI is the alternative for quick trials
+
+model_dependencies:                          # Served models are called over an OpenAI-compatible API;
+                                             # nothing is trained or fine-tuned here. Exactly one main
+                                             # model is required; the safety judges are optional.
+  - "nvidia/nemotron-3-nano"                 # Default main model on Cloudera AI Inference: answers as
+                                             # the CrewAI agents and runs the NeMo self-check rails
+  - "gpt-4o-mini"                            # Main model when the OpenAI provider is chosen instead
+  - "meta-llama/Llama-Guard-3-8B"            # Optional safety judge on Cloudera AI Inference
+  - "nvidia/llama-3.1-nemoguard-8b-content-safety"  # Optional safety judge via NVIDIA NIM
+                                             # (integrate.api.nvidia.com -- leaves the environment)
+  - "spacy/en_core_web_lg"                   # Local NER model used by Presidio for PII detection;
+                                             # one-time ~560 MB download, runs on CPU
+
+# --- Provenance ---
+publisher: "cloudera"                        # cloudera | partner-name
+source: "Internal"                           # Internal | Partner | NVIDIA Adaptation | Customer
+
+# --- Repository & assets ---
+public_github_link: "https://github.com/SuperEllipse/ai-governance"
+#private_github_link: ""                     # Not applicable -- the repo above is public
+
+# --- Ownership ---
+maintainer_name: "Vish Rajagopalan"
+
+# --- Dates ---
+date_created: "2026-06-21"                   # First commit
+date_updated: "2026-11-01"                   # Bump on the commit that ships a change worth cataloguing
+published_date: ""                           # Set when it first appears in the catalog

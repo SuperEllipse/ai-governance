@@ -110,7 +110,7 @@ def main() -> int:
     if not (WEB_DIST / "index.html").is_file():
         print(
             f"WARNING: {WEB_DIST} not found; only the API will be served. "
-            "Build the UI with: cd web && npm ci && npm run build",
+            "Build the UI with: cd interface && npm ci && npm run build",
             file=sys.stderr,
         )
     if mode == "session":

@@ -1,4 +1,4 @@
-"""FastAPI app: JSON API under /api plus the built React UI from web/dist."""
+"""FastAPI app: JSON API under /api plus the built React UI from interface/dist."""
 
 from __future__ import annotations
 
@@ -24,14 +24,14 @@ from src.guardrails.violation_parser import (
 from src.simulation.queries import EXAMPLE_QUERIES, get_all_queries
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-WEB_DIST = PROJECT_ROOT / "web" / "dist"
+WEB_DIST = PROJECT_ROOT / "interface" / "dist"
 
 _MISSING_BUILD_HTML = """<!doctype html>
 <html><head><title>Web UI not built</title></head>
 <body style="font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto;">
 <h1>Web UI not built</h1>
-<p>The API is running, but <code>web/dist/</code> was not found.</p>
-<pre>cd web
+<p>The API is running, but <code>interface/dist/</code> was not found.</p>
+<pre>cd interface
 npm ci
 npm run build</pre>
 <p>Then restart the app. API health: <a href="api/health">api/health</a></p>
