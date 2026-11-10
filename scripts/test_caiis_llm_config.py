@@ -230,7 +230,7 @@ def test_default_llm_config_prefers_caiis_when_configured() -> None:
     with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-openai-key"}, clear=True):
         cfg = default_llm_config()
         _assert(cfg.provider == "openai", "default_llm_config should use openai without CAIIS")
-        _assert(cfg.model == "gpt-4o-mini", "default should use gpt-4o-mini")
+        _assert(cfg.model == "gpt-6.1-sol", "default should use gpt-6.1-sol")
 
     with patch.dict(os.environ, {**env, "DEFAULT_LLM_PROVIDER": "openai"}, clear=True):
         cfg = default_llm_config()

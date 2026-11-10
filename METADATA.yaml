@@ -65,7 +65,7 @@ model_dependencies:                          # Served models are called over an 
                                              # model is required; the safety judges are optional.
   - "nvidia/nemotron-3-nano"                 # Default main model on Cloudera AI Inference: answers as
                                              # the CrewAI agents and runs the NeMo self-check rails
-  - "gpt-4o-mini"                            # Main model when the OpenAI provider is chosen instead
+  - "gpt-6.1-sol"                            # Main model when the OpenAI provider is chosen instead
   - "meta-llama/Llama-Guard-3-8B"            # Optional safety judge on Cloudera AI Inference
   - "nvidia/llama-3.1-nemoguard-8b-content-safety"  # Optional safety judge via NVIDIA NIM
                                              # (integrate.api.nvidia.com -- leaves the environment)

@@ -34,7 +34,7 @@ if [[ -f "/home/cdsw/.env" ]]; then
 fi
 
 # OpenAI defaults when using the OpenAI provider (override via .env or export)
-export OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}"
+export OPENAI_MODEL="${OPENAI_MODEL:-gpt-6.1-sol}"
 export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
 
 # CAIIS: web UI defaults to OpenAI unless DEFAULT_LLM_PROVIDER=caiis (see detect_default_provider)

@@ -59,7 +59,7 @@ _load_project_env()
 @dataclass
 class LLMConfig:
     provider: ProviderName = "openai"
-    model: str = "gpt-4o-mini"
+    model: str = "gpt-6.1-sol"
     base_url: str = "https://api.openai.com/v1"
     api_key: str = ""
     temperature: float = 0.2
@@ -114,7 +114,7 @@ def default_llm_config() -> LLMConfig:
 def default_openai_config() -> LLMConfig:
     return LLMConfig(
         provider="openai",
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        model=os.getenv("OPENAI_MODEL", "gpt-6.1-sol"),
         base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         api_key=os.getenv("OPENAI_API_KEY", ""),
         max_tokens=_default_max_tokens("openai"),

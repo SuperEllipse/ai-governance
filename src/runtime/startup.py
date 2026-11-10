@@ -124,7 +124,7 @@ def configure_guardrails_llm_env() -> None:
     from src.llm.caiis_url import resolve_caiis_base_url, resolve_caiis_model
     from src.llm.provider import is_caiis_configured
 
-    os.environ.setdefault("OPENAI_MODEL", "gpt-4o-mini")
+    os.environ.setdefault("OPENAI_MODEL", "gpt-6.1-sol")
     os.environ.setdefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
     os.environ.setdefault("MAIN_MODEL_ENGINE", "openai")
 
