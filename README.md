@@ -1,5 +1,10 @@
 # Cloudera Blueprint: AI Governance with NVIDIA NeMo Guardrails
 
+<div align="center">
+  <img width="512" height="280" alt="image" src="data/logo.png" />
+</div>
+
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -170,3 +175,11 @@ The app tier is CPU-only. Models run on Cloudera AI Inference Service or OpenAI.
 - [Cloudera AI Applications](https://docs.cloudera.com/machine-learning/cloud/applications/topics/ml-applications-c.html)
 - [CrewAI](https://docs.crewai.com/)
 - [Microsoft Presidio](https://microsoft.github.io/presidio/)
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+## Disclaimer
+
+*This blueprint is intended for Proof-of-Concept and research use only. It is not designed for production deployment. Use in production environments is at the user's own risk. The authors and contributors accept no liability for operational impacts or damages.*
