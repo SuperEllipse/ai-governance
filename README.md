@@ -1,7 +1,12 @@
 # Cloudera Blueprint: AI Governance with NVIDIA NeMo Guardrails
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](pyproject.toml)
+[![GitHub Stars](https://img.shields.io/github/stars/SuperEllipse/ai-governance?logo=github)](https://github.com/SuperEllipse/ai-governance/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/SuperEllipse/ai-governance?logo=github)](https://github.com/SuperEllipse/ai-governance/network/members)
+[![GitHub Watchers](https://img.shields.io/github/watchers/SuperEllipse/ai-governance?logo=github)](https://github.com/SuperEllipse/ai-governance/watchers)
 
 <div align="center">
-  <img width="512" height="280" alt="image" src="data/logo.png" />
+  <img width="350" height="350" alt="image" src="data/logo.png" />
 </div>
 
 
